@@ -140,7 +140,7 @@ ignore_int:
     movq    %ds,    %rax
     pushq   %rax
 
-    movq    $0x10,  %rax // 第一個GDT描述符(在IA-32e模式下GDT的長度為16byte)
+    movq    $0x10,  %rax // 第二個GDT描述符
     movq    %rax,   %ds
     movq    %rax,   %es
 

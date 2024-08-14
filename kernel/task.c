@@ -2,9 +2,48 @@
 #include "printk.h"
 #include "linkage.h"
 
+extern void ret_system_call(void);
+extern void system_call(void);
+
+void __switch_to(struct task_struct *prev, struct task_struct *next);
+unsigned long init(unsigned long arg);
+
+void user_level_function()
+{
+    long ret = 0;
+    char string[]="Hello World!\n";
+    __asm__ __volatile__ (
+                    "leaq   sysexit_return_address(%%rip),  %%rdx   \n\t"
+                    "movq   %%rsp,  %%rcx       \n\t"
+                    "sysenter                   \n\t"
+                    "sysexit_return_address:    \n\t"
+                    :"=a"(ret):"0"(1),"D"(string):"memory");
+    while(1);
+}
+
+unsigned long do_execve(struct pt_regs *regs)
+{
+    regs->rdx = 0x800000; //RIP
+    regs->rcx = 0xa00000; //RSP
+    regs->rax = 1;
+    regs->ds = 0;
+    regs->es = 0;
+    color_printk(RED,BLACK,"do_execve task is running\n");
+    memcpy(user_level_function,(void *)0x800000,1024); // 定義與string.h的函式有區別，為memcpy(src,dst,size);
+    return 0;
+}
+
 unsigned long init(unsigned long arg)
 {
+    struct pt_regs *regs;
     color_printk(RED,BLACK, "init task is running,arg:%#018lx\n", arg);
+    current->thread->rip = (unsigned long)ret_system_call;
+    current->thread->rsp = (unsigned long)current + STACK_SIZE - sizeof(struct pt_regs);
+    regs = (struct pt_regs*)current->thread->rsp;
+    __asm__ __volatile__ ( "movq    %1, %%rsp   \n\t"
+                           "pushq   %2          \n\t"
+                           "jmp     do_execve   \n\t"
+                           ::"D"(regs),"m"(current->thread->rsp),"m"(current->thread->rip):"memory");
     return 1;
 }
 
@@ -41,7 +80,7 @@ unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned 
     thd->rsp = (unsigned long)tsk + STACK_SIZE - sizeof(struct pt_regs);
 
     if(!(tsk->flags & PF_KTHREAD))
-        thd->rip = regs->rip = (unsigned long)ret_from_intr;
+        thd->rip = regs->rip = (unsigned long)ret_system_call;
 
     // PF_KTHREAD用來判斷這一個行程是核心層的還是應用層的。如果是應用層就把程式入口設定在ret_from_intr。
     // 感覺像是我們撰寫main函式的程式入口 _start?
@@ -102,7 +141,10 @@ unsigned long do_exit(unsigned long code)
     while(1);
 }
 
-
+unsigned long  system_call_function(struct pt_regs *regs)
+{
+    return system_call_table[regs->rax](regs);
+}
 
 void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
@@ -140,6 +182,10 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
     init_mm.end_brk = memory_management_struct.end_brk; // 核心程式碼的結束地址
 
     init_mm.start_stack = _stack_start; // 系統第一個行程的stack基地址
+
+    wrmsr(0x174, KERNEL_CS); // KERNEL_CS = 0x8表示載入第一個GDT描述符。
+    wrmsr(0x175, current->thread->rsp0); // 系統調用的rsp
+    wrmsr(0x176, (unsigned long)system_call); // 系統調用的rip
 
     //	init_thread,init_tss
     set_tss64(init_thread.rsp0, init_tss[0].rsp1, init_tss[0].rsp2, init_tss[0].ist1, init_tss[0].ist2, init_tss[0].ist3, init_tss[0].ist4, init_tss[0].ist5, init_tss[0].ist6, init_tss[0].ist7);

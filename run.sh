@@ -7,7 +7,6 @@ cd ../kernel
 make
 cd ..
 
-
 sudo mount boot.img /media/ -t vfat -o loop
 sudo cp bootloader/loader.bin /media/
 sudo cp kernel/kernel.bin /media/
