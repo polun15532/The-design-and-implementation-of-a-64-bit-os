@@ -7,10 +7,11 @@
 >但有虛擬內存的概念下數據的段其實可以交由page table管理，這些權限管理以級記憶體空間分配是被放在page table的entry上。
 
 對於核心執行頭程式(下圖的head.s)，我們必須在link階段按照規畫好的地址空間布局放入程式碼，loader才能跳轉到這個位置執行。在這裡作者提供了linker的腳本kernel.lds，幫助我們把編譯好的程式載入目標內存，詳細介紹放在書中的第8章。核心層的起始線性地址為0xffff800000000000對應物理地址的0，而核心程式的起始線性地址位於0xffff800000000000 + 0x100000。
-![核心執行頭程式的位置圖](https://hackmd.io/_uploads/BynMl7GtC.png)
+![核心執行頭程式的位置圖](./image/ch4/memory_layout_of_head_S.png)
 摘錄自一個64位操作系統的設計與實現 圖4-1
 
 ```
+kernel/head.S
 .section .data
 
 .global GDT_Table
@@ -33,6 +34,7 @@ GDT_BASE:   .quad   GDT_Table
 ```
 這裡是定義系統的描述符表。我比較好奇的是在loader.asm中有一段內容是用於定義gdt64其中部分內容與head.S相同，為何要定義把gdt定義在兩個地方，到head.S中在重新載入一次?
 ```
+kernel/head.S
 loader.asm的定義
 [SECTION gdt64]
 
@@ -43,6 +45,7 @@ LABEL_DESC_DATA64:  dq    0x0000920000000000
 不過他在head.S的內容有多定義IDT與TSS。
 以下這裡是page table的定義。
 ```
+kernel/head.S
 //=======	init page
 .align 8
 
@@ -82,29 +85,28 @@ __PDE:
 	.fill	499,8,0
 ```
 在IA-32e架構下，頁表可分為4個等級(現在已經有支援5級的cpu出現了)，每個頁表項從4byte擴張到8byte，並且分頁機制除經典的4KB外也提供2MB與1GB大小的page。下圖為intel手冊關於IA-32e模式4級頁表的描述，其中PML4E是1級頁表，cr3暫存器指向他的起始地址。PDPTE為2級頁表，PDE為3級頁表，PT才是4級頁表。在64位元架構下總共48位元作為尋址使用，其中12位元做為page offset，剩下36位元由4級頁表均分每級頁表分配9位元，因此每級頁表最多有512個條目。在這裡我們只討論頁表大小為4KB的狀況。
-![image](https://hackmd.io/_uploads/HyAlJh4Y0.png)
-![螢幕擷取畫面 2024-07-29 135939](https://hackmd.io/_uploads/Bypkx3NYC.png)
-圖片取自Intel 64 and IA-32 Architectures
-Software Developer’s Manual vol.3 
+![image](./image/ch4/page_table_info.png)
+![image](./image/ch4/CPU_addressing_of_the_page_table.png)
+圖片取自Intel 64 and IA-32 Architectures Software Developer’s Manual vol.3 
 在這段程式碼中利用.org將這些結構定義在指定的內存位置，.align則是用於內存對齊的.align 8代表每一項都以8byte對齊。另外這部分的地址會經作者寫的linker被映射到線性地址的0xffff800000000000後的區域，而head.S被放字物理內存的1MB處所以對應的線性地址是0xffff800000100000。另外填入每個page的值最後8位的0x83是page的屬性。在PDE一個條目管控2MB的內存。
 下圖為page table entry的格式
-![螢幕擷取畫面 2024-07-29 140314](https://hackmd.io/_uploads/H156en4KC.png)
-圖片取自Intel 64 and IA-32 Architectures
-Software Developer’s Manual
+![image](./image/ch4/page_table_structure.png)
+圖片取自Intel 64 and IA-32 Architectures Software Developer’s Manual
 其中base address最大為28bit這是因為處理器最多支持40位元的物理地址尋址，而一個page table的大小恰好為4KB，因此40-12=28。
 
 
 | 符號 | 描述                                                                                                     |
-| ---- | -------------------------------------------------------------------------------------------------------- |
+| ---- | ----------------------------------------------------------------------------------------------------|
 | P    | 置位代表此頁在內存中                                                                                     |
 | R/W  | 置位代表可讀寫，若無則代表此頁為只能讀取                                                                 |
 | U/S  | 此位元被置位代表此頁可供所有人訪問，如果未設置只有supervisor可以訪問                                   |
 | PWT  | Write-Through，置位啟用write-through caching(資料同時更新到快取與內存)，若無則為write-back(僅在快取更新) |
 | PCD  | 這個位元用來控制page是否能進入快取，如置位不能進入快取                                                   |
 | A    | 用來追蹤這個頁表示否被訪問過(此位元由作業系統管理，CPU不管)                                              |
-| D    | 表示dirty如果被置位表示這個page有被修改過                                                                      |
+| D    | 表示dirty如果被置位表示這個page有被修改過                                                                |
 
 ```
+kernel/head.S
 .section .text
 
 _start:	//程式默認起始位置
@@ -163,7 +165,7 @@ entry64:
 go_to_kernel:
 	.quad	Start_Kernel
 ```
-_start為程式的起始位置，並且需使用.golbal對_start加以修飾，否則會出現警告cannot find entry symbol _start，因為他不是全局的。在GAS編譯器中，`lgdt GDT_POINTER(%rip)` 這一行是RIP-Relative尋址，他的意思是以rip為中點使用相對偏移量來計算地址(讓目標地址依賴當前的rip暫存器，相對地址)，如果位移量是32位元整數值，那就會提供rip±2GB的尋址範圍。另外在NASM中編譯器不支持displacement(%rip)格式，必須使用關鍵字rel修飾，寫法為`mov	rax,[rel table]`。另外在GAS編譯器中不支援ljmp或lcall所以在程式碼中只使用lret(這是AT&T格式等價於intel的retf(遠眺轉))來進行段間切換。但如果要由lret返回就必須自己把cs、rip壓入stack中等待返回時彈出,最後兩條pushq就是這樣。
+_start為程式的起始位置，並且需使用.golbal對_start加以修飾，否則會出現警告cannot find entry symbol _start，因為他不是全局的。在GAS編譯器中，`lgdt GDT_POINTER(%rip)` 這一行是RIP-Relative尋址，他的意思是以rip為中點使用相對偏移量來計算地址(讓目標地址依賴當前的rip暫存器，相對地址)，如果位移量是32位元整數值，那就會提供rip±2GB的尋址範圍。另外在NASM中編譯器不支持displacement(%rip)格式，必須使用關鍵字rel修飾，寫法為`mov	rax,[rel table]`。另外在GAS編譯器中不支援ljmp或lcall所以在程式碼中只使用lret(這是AT&T格式等價於intel的retf(遠跳轉))來進行段間切換。但如果要由lret返回就必須自己把cs、rip壓入stack中等待返回時彈出,最後兩條pushq就是這樣。
 
 ## 螢幕顯示
 影格緩衝存儲器(frame buffer)他是用於顯示螢幕畫面的內存映射，此存儲器的每個存儲單元對應螢幕的一個像素點。可透過對每個像素點操作在螢幕上繪製文字或是圖片。在loader所設定的顯示模式可支援32位元深度的像素點，其中0-7位表示藍色，8-15位表示綠色，16-23位表示紅色，而24-31是保留位，這32位原可以表示出$2^{24}$種顏色。在loader我們所設定的螢幕解析度為1440*900。根據BIOS返回的資訊frame buffer的起始物理地址位於0xa00000，將需要的顏色寫入這個地址即可完成畫面繪製。若想要在螢目上顯示文字可建立一個表用於查找文字與螢幕記憶體位置的映射關係。
@@ -202,7 +204,6 @@ for (count = 0; count < i || line; ++count){
 
 printfk等待補充
 
-
 在編譯的過程中得到了以下警告，經查驗發現是書寫strlen函式使用關鍵字inline的問題
 ```
 ld -b elf64-x86-64 -z muldefs -o system head.o main.o printk.o -T Kernel.lds 
@@ -234,21 +235,21 @@ inline int strlen(char *String)
 > An external definition is an external declaration that is also a definition of a function (other than an inline definition) or an object. If an identifier declared with external linkage is used in an expression (other than as part of the operand of a sizeof operator whose result is an integer constant), somewhere in the entire program there shall be exactly one external definition for the identifier; otherwise, there shall be no more than
 one.
 
-當我們使用inline但是沒有位齊提供外部定義時他是一個未指定的行為(unspecified)，具體實作取決於編譯器。為了解決這個問題有兩種方案
->1.將strlen的修飾詞修改為`static inline int strlen(char *String);` 他會將函數轉變成interal linkage只要在同一個 translation unit都可以使用這個函數
+當我們使用inline但若沒有提供外部定義時他是一個未指定的行為(unspecified)，具體實作取決於編譯器。為了解決這個問題有兩種方案
+>1.將strlen的修飾詞修改為`static inline int strlen(char *String);` 他會將函數轉變成interal linkage只要在同一個translation unit都可以使用這個函數
 >2.頭文件中關於strlen不做任何修改，但是在需要使用這個函式的文件中加上`extern int strlen(char *String);`這可將函式添加外部定義。
 
 詳細討論可察看此連結
 [Is "inline" without "static" or "extern" ever useful in C99?](https://stackoverflow.com/questions/6312597/is-inline-without-static-or-extern-ever-useful-in-c99?noredirect=1&lq=1)
 
 此時使用虛擬平台BOCHS執行可看到以下輸出，在畫面上我們成功顯示字串。
-![BOCHS輸出圖](https://hackmd.io/_uploads/Hy_jTaPYA.png)
+![BOCHS輸出圖](./image/ch4/hello_world.png)
 
 ## 系統異常
 ### 異常的分類
 錯誤(fault):這是一種可以修復的異常。只要錯誤被修正處理器將程式或任務的運行環境恢復至觸發異常前的狀態，並重新執行導致異常的指令(觸發異常的同時會把CS與EIP存入stack中待處理完異常後返回執行)。舉例來說page fault就屬這一類。
 陷阱(trap):陷阱同樣允許處理器繼續執行程式或任務，但是處理器會跳過產生此異常的指令，處理完異常後的返回地址是觸發陷阱的那條指令的下一條。
-中止(abort):發生嚴重的錯誤，此錯誤往往無法準確提供產生異常的未至，並且也不允許程序或任務繼續執行。典型的例子為硬體錯誤或是程式存在不合邏輯與非法值，舉例對地址0解引用。
+中止(abort):發生嚴重的錯誤，此錯誤往往無法準確提供產生異常的位置，並且也不允許程序或任務繼續執行。典型的例子為硬體錯誤或是程式存在不合邏輯與非法值，舉例對地址0解引用。
 
 下表為不同向量號的異常中斷，其中32~255號可由用戶自定義，使用時必須將定義載入IDT中斷描述符表，IDT的描述符有256個對應這裡的0-255。
 | 向量號 | 助記符 | 異常/中斷類型 | 異常/中斷描述                                                   | 錯誤碼     | 觸發源                         |
@@ -280,7 +281,7 @@ one.
 ## 系統異常處理
 intel官方手冊6.12節EXCEPTION AND INTERRUPT HANDLING有針對處理器的異常處理做詳細的描述。
 而處理器用類似組合語言指令CALL的方法來執行異常/中斷處理程序，當處理器接收到異常/中斷時，就會高據產生的向量號從中斷描述符表IDT中查找，並從對應的中斷描述符中調轉到處理程式的位置。如果索引到任務門則發生任務切換轉去處理異常/中斷任務，而索引到interrupt gate或是trap gate則會像執行CALL一樣去執行異常/中斷處理程式，需要注意的是如果是產生的是中斷，此類任務須使用IRETD。
-![Interrupt Procedure Call](https://hackmd.io/_uploads/ryk68AvtA.png)
+![Interrupt Procedure Call](./image/ch4/interrupt_procedure_call.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 圖6.3
 
 處理器在執行異常/中斷處理程式時，會檢測異常/中斷處理程式的特權級別，並與cs暫存器的特權級別做比較(這個特權級別收錄在CS所指向的GDT描述符中)。如果異常/中斷處理程式的特權級別更高，則會在執行異常/中斷處理程式前切換Stack空間(切換SS暫存器)，下面是書中撰寫的切換過程。
@@ -288,17 +289,18 @@ intel官方手冊6.12節EXCEPTION AND INTERRUPT HANDLING有針對處理器的異
 >2.另外在stack切換的過程中同時會壓入EFLAGS、CS、EIP到異常/中斷處理程式的stack。
 >3.如果異常會產生錯誤碼則保存在這個異常處理程式的stack中，放置於EIP暫存器後。
 
-如果異常/中斷處理程式的權級與當前任務的權級相等(這裡不會發生任務切換，調用過程像是呼叫函數一樣)。
+如果異常/中斷處理程式的權級與當前任務的權級相等(這裡不會發生任務切換，調用過程則像是呼叫函數一樣)。
 >1.處理器將保存被中斷程式的EFLAGS、CS、EIP到stack中。(這裡是保存被中斷任務的的stack)
 >2.如果異常產生錯誤碼則放在EIP暫存器後。
 
-![Stack Usage on Transfers to Interrupt and Exception-Handling Routines](https://hackmd.io/_uploads/rJ6IWWuKA.png)
+![Stack Usage on Transfers to Interrupt and Exception-Handling Routines](./image/ch4/Stack_Usage_on_Transfers_to_Interrupt_and_Exception_Handling_Routines.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 圖6.4
 
 處理器必須使用IRET才能從異常/中斷處底程式中返回，IRET會恢復保存在stack上的EFLAGS。EFLAGS的IOPL只有在權級(CPL)為0時才可以被還原，而IF標誌位只有在CPL<=IOPL時才可被改變。另外，當處理器透過interrupt gate或trap gate執行中斷/異常處理程式時，會至位TF標誌位來關閉單步調適功能。(VM、RF、NT也會被置位)。
 interrupt gate與trap gate的區別在於處理器對IF標誌位的操作。通過interrupt gate時處理器會置位IF從而屏蔽CPU接收其他的中斷請求。而通過trap gate時則不會置位IF。
 
 ```
+kernel/head.S
 setup_IDT:
     leaq    ignore_int(%rip),   %rdx
     movq    $(0x08 << 16),  %rax // 段選擇子的位置從bit8開始
@@ -320,15 +322,17 @@ rp_sidt:
     jne rp_sidt
 ```
 我們目前先將IDT初始化，讓所有的IDT都指向ignore_int的操作，根據IDT描述符的架構，我們將信息依序填入。BIT0-15是處理函數地址的低16位，而段選擇子則放在BIT16-31，只要把指定的段選擇子左移16位即可，BIT32-48則用於表數IDT的類型與權限，左移32位填入。剩下BIT48~64是對應函式地址的16~32位。接著把函式地址的高32位放入，這樣就完成IDT描述符的寫入。
-![64-Bit IDT Gate Descriptors](https://hackmd.io/_uploads/Byr4Qcdt0.png)
+![64-Bit IDT Gate Descriptors](./image/ch4/IDT_descriptor.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 圖6.7
 
-接下來將初始化TSS描述符，請這一這裡的操作不涉及設定TSS結構體，他只是在GDT上註冊TSS描述符。
-![TSS Descriptor](https://hackmd.io/_uploads/S1URO6_K0.png)
+接下來將初始化TSS描述符，這裡的操作不涉及設定TSS結構體，他只是在GDT上註冊TSS描述符。
+![TSS Descriptor](./image/ch4/TSS_descriptor.png)
 
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 vol.3 圖7.4
 
 ```
+kernel/head.S
+//=======   setup_TSS64
 setup_TSS64:
     leaq	TSS64_Table(%rip),	%rdx
     xorq    %rax,   %rax // rax = 0
@@ -361,7 +365,7 @@ go_to_kernel:
     .quad   Start_Kernel
 ```
 這一部分用於初始化GDT內所指向的TSS描述符，可透過LTR指令把TSS加載到TR暫存器中。目前的程式由於運行在特權0中所以在觸發IDT時，由於高特權級別所以不會切換任務stack也不需要訪問tss，在這種狀況下就算不加載TSS到TR中，異常/中斷處理程式也可以被正常執行。
-![64-Bit TSS Format](https://hackmd.io/_uploads/rJ_RVjdK0.png)
+![64-Bit TSS Format](./image/ch4/TSS64.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 圖7-11
 
 與TSS32和TSS16不同的是64位元架構不會儲存RAX、RBX、RCX等等的通用暫存器，這是因為IA-32e模式並不支援硬體的上下文交換。硬體上下文交換由於性能和可移植性較差的因素，作業系統通常使用軟體進行上下文交換，可參閱[Context_Switching](https://wiki.osdev.org/Context_Switching#Hardware_Context_Switching)。有別於實模式與保護模式，IA-32e模式的上下文完全交由使用者自己，程式將透過PCB去保存或恢復暫存器狀態。在TSS64中他專注於stack切換，因此當異常/中斷發生時，系統可以快速的切換stack而不需要進行完整的上下文切換。以下是intel手冊關於TSS64結構體的描述。
@@ -373,6 +377,7 @@ go_to_kernel:
 The task register is expanded to hold 64-bit base addresses in IA-32e mode. See also: Section 7.7, “Task Management in 64-bit Mode.”
 
 ```
+kernel/head.S
 //=======   ignore_int
 
 ignore_int:
@@ -447,10 +452,11 @@ int_msg:
 ### 系統異常處理函式
 
 ```
-//trap.c
+kernel/trap.c
 void sys_vector_init()
 {
-	/* 以下的程式碼就是依據IDT的編號以初始化，並且會依據這些異常/中斷向量號的功能設定權限如DPL=0的interrupt gate與trap gate
+	/**
+     * 以下的程式碼就是依據IDT的編號以初始化，並且會依據這些異常/中斷向量號的功能設定權限如DPL=0的interrupt gate與trap gate
 	 * 或是DPL=3的trap gate。對於這些中斷向量號我們以TSS結構體IST1區域以紀錄各自的stack地址。
 	 */
 	set_trap_gate(0,1,divide_error);
@@ -527,7 +533,7 @@ do								\
 首先這個巨集中我們有四個參數，分別為gate_selector_addr表示描述符的地址(即將設置的IDT條目)，attr表示描述符的屬性比如類型與權限，ist(Interrupt Stack Table)這表示放在TSS結構中的哪個IST上，code_addr為中斷/異常處理函式的地址。而輸入輸出約束則近一步告訴我們這些參數被放在那些暫存器中等待處理，並且函式最終的輸出結果為何。首先內嵌組合語言的格式為"指令:輸出:輸入:損壞"，由於64位元架構一個描述符的大小為16byte。movq	%%rax,	%0這條指令就是把rax暫存器的內容寫到內存的gate_selector_addr這個位置，而`movq %%rdx, %1`則是填入gate_selector_addr的後8byte。在輸入部分`"i"(attr << 8)`表示把attr左移8位並作為立即數輸入。另外`"3"((unsigned long *)(code_addr))`則是對應輸出約束的`"=&a"(__d0)`，此變量將被分配到ax暫存器，`"2"(0x8 << 16)`則被放到`"=&d"(__d1)`的dx暫存器。在這些輸入輸出中，如果沒有指定使用那些佔位符，這些佔位符就會以出線的先後順序確定使用的是幾號佔位符。
 回到組合語言指令本身`movw %%dx, %%ax`，dx暫存器本身放置的是8 << 16，所以這條指令相當於把ax暫存器的低16位設0，`andq $0x7, %%rcx`則是保證rcx的值必定在IST1-IST7中間。addq %4, %%rcx實際上就是把權限(attr<<8)加入rcx，而左移的原因是因為地址IDT+4
 的第8-11byte代表type,12-16則表示一些權限，左移8位可以讓這些位元被設定。接下來`shlq $32, %%rcx`，就是為了補足IDT+4所差距的4byte地址。並且使用`addq %%rcx, %%rax`把這些資訊放到rax暫存器上(這裡也可以使用or完成)。接著就把code_addr的低32位元放入rcx暫存器中，並右移16位元取高位地址部分。`shlq $48, %%rcx`左移48位使得將這16位的地址移動到描述符對應的位置。 `addq %%rcx, %%rax`接著把地址輸入rax暫存器中，這樣就定義好描述符前8byte此時利用`movq %%rax, %0`把這8byte寫入內存。而剩下的8位元就只剩下地址了`shrq $32, %%rdx`與`movq %%rdx, %1`就是把剩下的地址項寫入IDT的內存空間。
-另外c語言無法實現把參數壓入暫存器的操作，這部分需要透過組合語言實現。必須在異常處理程式的入口保存程序的暫存器帶返回時恢復。
+另外c語言無法實現把參數壓入暫存器的操作，這部分需要透過組合語言實現。必須在異常處理程式的入口中，保存當前程序的暫存器等待返回時恢復。
 
 ```
 RESTORE_ALL:
@@ -599,7 +605,7 @@ error_code:
 	callq 	*%rdx // rdx存儲函式的入口地址
 
 ```
-除法的異常處理通常不會有錯誤碼，為了讓操作統一在開始處`pushq $0`將數字0壓入stack代替error code。使用`xchgq %rax, (%rsp)`此舉是為了將FUNC函式的地址換入stack上。接著則將暫存器依照標籤RESTORE_ALL的順序反項押入stack中。此時把內存地址ERRCODE(%rsp)當作參數輸入到%rsi，`movq %rsp, %rdi`也作為函數的輸入參數使用。`callq *%rdx`表示跳轉到rdx所儲存的地址(*表示絕對地址，而非相對地址)，這是一種間接調用此時rdx儲存的就是函式的入口地址。當異常處理函式結束後就還原暫存器的內容。
+除法的異常處理通常不會有錯誤碼，為了讓操作統一在開始處`pushq $0`將數字0壓入stack代替error code。使用`xchgq %rax, (%rsp)`此舉是為了將FUNC函式的地址換入stack上。接著則將暫存器依照標籤RESTORE_ALL的順序反向壓入stack中。此時把內存地址ERRCODE(%rsp)當作參數輸入到%rsi，`movq %rsp, %rdi`也作為函數的輸入參數使用。`callq *%rdx`表示跳轉到rdx所儲存的地址(*表示絕對地址，而非相對地址)，這是一種間接調用此時rdx儲存的就是函式的入口地址。當異常處理函式結束後就還原暫存器的內容。
 ```
 ret_from_exception:
 	/*GET_CURRENT(%ebx)	need rewrite*/
@@ -623,7 +629,7 @@ ENTRY(page_fault)
 ```
 ### 錯誤碼介紹
 以下來介紹錯誤碼的格式
-![error code](https://hackmd.io/_uploads/H1B4Vg0FC.png)
+![error code](./image/ch4/error_code.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 6.13節
 
 EXT:置位表示異常是在向程式投遞外部事件中觸發，如中斷或是更早期的異常。
@@ -633,6 +639,7 @@ TI:只有當IDT復位(0)這一位才有效，置位則說明這個段選擇子�
 do_invalid_TSS追加了錯誤碼的解析功能。
 
 ```
+kernel/trap.c
 void do_invalid_TSS(unsigned long rsp,unsigned long error_code)
 {
     unsigned long *p = NULL;
@@ -660,7 +667,7 @@ void do_invalid_TSS(unsigned long rsp,unsigned long error_code)
 ```
 ### page fault
 而對於page fault而言，錯誤碼的定義與其他異常的錯誤碼不同以下是intel手冊的定義。
-![page fault error code](https://hackmd.io/_uploads/BJrsyMRYC.png)
+![page fault error code](./image/ch4/page_fault_error_code.png)
 圖片取自 Intel 64 and IA-32 Architectures  Software Developer’s Manual vol.3 圖6-11
 其中Ｐ標誌位用於指示異常是否有一個不存在的頁引發(P=0)，或進入的違規區域(P=1)，或是使用保留位(P=1)。
 W/R標誌位表示異常是由讀取頁(W/R=0)或是寫入頁(W/R=1)所觸發。
@@ -670,6 +677,7 @@ I/D標誌位則表示異常是否是透過讀取指令所產生。
 CR2控制暫存器將保存觸發異常的線性地址，異常處理程序可以透過這個地址定位到頁目錄項和頁表項，頁錯誤組裡程序需要在第二的頁錯誤發生前保存CR2的值以免再次觸發頁錯誤異常。
 在觸發異常時，處理器會將CS與EIP壓入異常處理程式的stack中，以便處理完異常後返回，如果是fault則指向觸發異常的指令，trap則是下一個指令。假設page fault發生在任務切戶前間，CS與EIP則可能指向新任務的第一條指令。
 ```
+kernel/trap.c
 void do_page_fault(unsigned long rsp,unsigned long error_code)
 {
     unsigned long *p = NULL;
@@ -708,6 +716,7 @@ void do_page_fault(unsigned long rsp,unsigned long error_code)
 ```
 在這裡先以內嵌組合語言語句取出cr2暫存器的值到變數cr2中，隨後解析錯誤碼的信息。
 ```
+kernel/main.c
 #include "lib.h"
 #include "printk.h"
 #include "gate.h"
@@ -726,19 +735,20 @@ void Start_Kernel(void)
 }
 
 ```
-編譯器可能出現此錯誤，這是因為在編譯檔案時我們選用-fno-builtin這確保編譯器使用的函式會是程式提供或是連接的版本，而不是C語言內建版本。而目前我們的lib.h尚未實作__stack_chk_fail，這裡先在Makefile中禁用stack保護-fno-stack-protector。
+編譯程式時，可能出現以下錯誤，這是因為在編譯檔案時我們選用-fno-builtin這確保編譯器使用的函式會是程式提供或是連接的版本，而不是C語言內建版本。而目前我們的lib.h尚未實作__stack_chk_fail，這裡先在Makefile中禁用stack保護-fno-stack-protector。
 ```
 ld: printk.o: in function `number':
 printk.c:(.text+0x4b6): undefined reference to `__stack_chk_fail'
 ```
-![image](https://hackmd.io/_uploads/ry-6W2Jc0.png)
+![image](./image/ch4/bochs1.png)
 這是在虛擬機上的執行結果可看到除以0的這個異常能夠正確顯示。
 而如果把i改成取址操作，則會因為page table尚未註冊任何page而產生錯誤。
-![image](https://hackmd.io/_uploads/ByqoznyqR.png)
+![image](./image/ch4/bochs2.png)
 此時我們已經實現了基礎的異常捕獲功能，接著我們將統計系統的可用內存並實現內存管理。
 
 ## 內存管理
-```kernel\memory.h
+```
+kernel\memory.h
 // 這個數據是在BIOS模式下使用BIOS中斷int 15 AX=E820取得的記憶體資料
 struct Memory_E820_Formate
 {
@@ -750,7 +760,8 @@ struct Memory_E820_Formate
 };
 ```
 這個結構體被放置在物理地址0x7E00處，由於我們已經開啟分頁這裡需要使用線性地址取得這個資料，對應的地址為0xffff800000007e00。
-```kernel\memory.c
+```
+kernel\memory.c
 void init_memory()
 {
     int i, j;
@@ -777,10 +788,8 @@ void init_memory()
 }
 ```
 在這裡他做了一個假設BOIS系統呼叫int 15h AX=e820h所返回的內存塊不會超過32個，因此使用for (i = 0; i < 32; ++i)。在這裡址統計type為1的內存塊，因為這是可提供給OS使用的RAM，其餘type=2、type=4，OS皆不可用，type=3則是	ACPI Reclaim Memory，而type=5代表無法被使用的記憶體(壞掉的記憶體會顯示這個值)。
-![image](https://hackmd.io/_uploads/B195BAx9R.png)
+![image](./image/ch4/memory_init.png)
 作業系統可以使用的記憶體容量為0x7ff8f000並且由兩個部分組成，一個是容量位0x9f000另一個容量為0x7fef0000，因此可用物理內存大小為0x7fef000 + 0x9f000 = 0x7ff8f000 ≈ 2047.55MB ≃ 2GB(這是在bochs的環境設置megs:2048 (表示2048MB))。
-
-
 
 
 ```
@@ -828,7 +837,8 @@ extern struct Global_Memory_Descriptor memory_management_struct;
 ```
 我們可以將E820結構體地址與長度的資料型態改成unsigned long，但要注意一點需要利用關鍵字__attribute__((packed))提醒編譯器不要填充空間讓結構體對齊，否則會得到錯誤的結果。接著定義全局記憶體描述符Global_Memory_Descriptor，他保有著int 15h AX=e820h所提供的所有記憶體信息。
 
-```memory.c
+```
+kernel/memory.c
 void init_memory()
 {
     ...
@@ -852,10 +862,11 @@ void init_memory()
 由於我們所有的記憶體資源都要經過頁表管理，在我們讀取結構體E820的地址資訊時，只有地址與頁表大小對齊的才能使用。所以這裡我們重新計數可用記憶體資源。在這裡我們以頁目錄大小2MB對齊，在起始地址的位置用巨集AGE_2M_ALIGN上對其，而結束地址則可使用PAGE_2M_MASK下對齊。現在我們已經有可使用的內存頁數量1022 (2MB)，可以以此為基礎實現分配函數alloc_pages。
 ### 分配可用物理頁
 在loader中我們透過系統調用int 15h AX=e820h來取得各個內存段的信息包刮RAM、ROM、保留空間等，我們以2MB為大小對作業系統可用的內存頁進行劃分，並且分跟後的內存頁將透過struct page結構體管理，並使用區域空間結構體struct zone用以代表可用內存區域，並記錄和管理各區的內存使用狀況。而這兩種結構體zone與page都會保存到全局結構體Global_Memory_Descriptor內。
-![image](https://hackmd.io/_uploads/Syf6HW-5R.png)
-取自Global_Memory_Descriptor 圖4-15
+![image](./image/ch4/Global_Memory_Descriptor.png)
+取自一個64位操作系統的設計與實現 圖4-15
 在這裡我們定義page與zone
 ```
+kernel/memory.h
 struct Page {
     struct Zone     *zone_struct;   // 本頁所屬區域結構體
     unsigned long   PHY_address;    // 頁的物理地址
@@ -882,6 +893,7 @@ struct Zone {
 ```
 在結構體page中，PHY_address與zone_struct可透過計算獲得，但是這裡引入兩個成員可以節省計算時間，而attribute用於描述頁的映射狀態、活動狀態、使用者信息等。reference_count則代表當前有多少程式使用這個page。在zone中total_pages_link代表這個頁被引用的數量，但是要注意一個物理頁可以同時映射到多個線性地址，所以page_using_count不一定與量total_pages_link相等，而attribute則用於描述當前區域是否支援DMA或是頁是否經過頁表映射等訊息。接著我們在struct Global_Memory_Descriptor追加變量。
 ```
+kernel/memory.h
 struct Global_Memory_Descriptor {
     struct E820     e820[32];
     unsigned long   e820_length;
@@ -905,6 +917,8 @@ bits_map與pages_struct呈現一對一的映射關係，建立bits將方便檢�
 這些變量是在鏈結器在kernel.lds所指定的地址處，我們可以透過聲明變量(標誌符)在main.c中把對應的地址輸入到start_code、end_code、end_data
 與end_brk內。
 ```
+kernel/main.c
+
 extern char _text;
 extern char _etext;
 extern char _edata;
@@ -940,7 +954,8 @@ void init_memory()
 ```
 物理地址的空間劃分訊息通常位於最後一條內存段劃分信息中，我們把這部分信息取出，並將這個地址以2MB對齊並劃分分頁，這是物理地址可分頁數，需要注意的是這個分頁數不是所有地址都可以被使用有些是ROM有些是內存空洞。接著我們將這個分頁數量賦值給成員bits_size。bits_map指針將指向核心程式的結束地址，另外bits_map指針會上對齊至4KB邊界。接著將bits_map內的全部位置先以0xff標註為非內存頁(之後會將真正可用的物理內存頁復位);
 
-```memory.c
+```
+kernel/memory.c
 void init_memory()
 {
     ...
@@ -965,7 +980,8 @@ struct page結構體的物理地址將放置在bits_map後的獨立一個新頁�
 
 ```
 這裡用來建立zone的結構體信息，書上說目前因為無法計算zone的具體數量所以先將size定義為0，並且zones_length先以5個結構體計算並與sizeof(long)對齊。建立完上述空間後，再次遍歷E820中的所有元素以完成初始化。
-```memory.c
+```
+kernel/memory.c
 void init_memory()
 {
     ...
@@ -1012,7 +1028,7 @@ void init_memory()
             p->age = 0;
 
             *(memory_management_struct.bits_map + ((p->PHY_address >> PAGE_2M_SHIFT) >> 6)) ^= 1UL << (p->PHY_address >> PAGE_2M_SHIFT) % 64;
-            /* 在bit_map一個位元就代表一個頁。
+            /* bit_map中一個位元就代表一個頁。
              * (p->PHY_address >> PAGE_2M_SHIFT) >> 6用於索引此物理頁對應bits_map哪一項。
              * 右移6位則是因為bits_map的每一個元素是64位元。
              * 1ul << (p->PHY_address >> PAGE_2M_SHIFT) % 64 則用於計算需要標記的是哪一個位元。
@@ -1024,7 +1040,8 @@ void init_memory()
 }
 ```
 這段程式用於初始化bit_map、Zone、Page，他會遍歷E820內所有物理內存信息，並取出type=1的可用物理內存段，接著判斷這一段物理內存是否可以劃分以2MB為單位對齊並且大小為2MB的頁，如果可以這個內存段就會被分配到一個Zone，並且根據Zone的起始地址start定義這個Zone的頁pages_group從哪裡開始。接著遍歷zone所具有的內存頁Page，把這個Page歸屬於哪個zone，與對應的物理地址和權限等等資訊寫入。最後將這個物理頁在bit_map中對應的位元清0，代表此頁可被使用。
-```memory.c
+```
+kernel/memory.c
 void init_memory()
 {
     ...
@@ -1079,6 +1096,7 @@ void init_memory()
 ```
 程式先把核心程式的start_code、end_code、end_data、end_brk、end_of_struct變量打印。接著用i記錄這個業管理結構的大小，由於end_of_struct的值一開始是由head.S中繼承過來的是線性地址，需轉換成物理地址，使用巨集PAGE_2M_SHIFT可以獲得這個結構總共佔據多少2M大小的分頁。接著，初始化這些分頁，把它們添加上PG_PTable_Maped(經過頁表映射的頁)、PG_Kernel_Init(核心初始化程式)、PG_Active(使用中的頁)、PG_Kernel(核心的頁)的屬性。這些屬性被定義在memory.h中，每個屬性都佔據attribute的一個位元。接著init_memory剩下的程式碼則用於清理頁表項，這些頁表在進入IA-32e mode時需要維持一致性頁表映射(物裡地址與線性地址相同)，從loader繼承過來的資料此時已經被放入核心的數據段中，因此不需要保留一致性頁表映射。
 ```
+kernel/memory.c
 void init_memory()
 {
     ...
@@ -1107,7 +1125,7 @@ do {                                        \
                 );                          \
 }while(0)
 ```
-這個巨集使用do{}while(0)只是為了讓使用巨集時，可以在後面加上分號，符合書寫習慣。關鍵字__volatile__代表這些指令不可以被優化或是重新排序。而輸出約束定義tmpreg是操作數0，所以操作是先將cr3暫存器的值放入變數tmpreg中，並將這個值稍後移回CR3暫存器。雖然上述程式碼並沒有改變CR3的值，但是寫入的操作就會讓TLB刷新。
+此巨集使用do{}while(0)只是為了讓使用巨集時，可以在後面加上分號，符合書寫習慣。關鍵字__volatile__代表這些指令不可以被優化或是重新排序。而輸出約束定義tmpreg是操作數0，所以操作是先將cr3暫存器的值放入變數tmpreg中，並將這個值稍後移回CR3暫存器。雖然上述程式碼並沒有改變CR3的值，但是寫入的操作就會讓TLB刷新。
 ```
 static inline unsigned long *Get_gdt()
 {
@@ -1124,6 +1142,7 @@ static inline unsigned long *Get_gdt()
 ```
 函式Get_get則是把cr3的儲存的地址放入操作數0也就是變數tmp中。
 ```
+kernel/memory.c
 unsigned long page_init(struct Page *page, unsigned long flags)
 {
     if (!page->attribute) {
@@ -1146,7 +1165,7 @@ unsigned long page_init(struct Page *page, unsigned long flags)
 }
 ```
 page_init函式用於初始化頁，首先檢查此頁的屬性如果沒有任何東西，說明這是準備要建立的新頁，此時先到bit_map中置位這個頁表的位元表示啟用這個頁，接著位這個頁添加屬性。而如果當前頁具有引用屬性(PG_Referenced)或是共享屬性(PG_K_Share_To_U)在添加屬性的同時需要增加zone結構體的引用計數，若都沒有就只是添加頁表屬性與置位bit_map。下圖為運行的結果。
-![image](https://hackmd.io/_uploads/Hy0vWzm9R.png)
+![image](./image/ch4/bochs3.png)
 如此我們已經成功初始化GMD、page與zone。
 
 ### 實現物理頁內存分配函數
@@ -1183,7 +1202,8 @@ struct Page * alloc_pages(int zone_select,int number,unsigned long page_flags)
 首先函式會透過變數zone_select選擇從DMA區域空間、以映射頁表的空間或是位映射頁表的空間中一次性申請連續物理頁，並對這些頁設置page_flags屬性。
 如果zone_select無法找到匹配的區域空間會打印錯誤訊息並返回。此外在.bochsrc文件中我們設定megs:2048，所以在bochs虛擬機上僅有2GB的內存空間，因此目前ZONE_DMA_INDEX、ZONE_NORMAL_INDEX、ZONE_UNMAPED_INDEX都是代表同一個空間(默認值0的空間)。
 ```
-struct Page * alloc_pages(int zone_select,int number,unsigned long page_flags)
+kernel/memory.c
+struct Page *alloc_pages(int zone_select,int number,unsigned long page_flags)
 {
     ...
     // number為需申請的頁數，遍歷所有的zone，找到一個zone可分配number頁數的內存。
@@ -1232,8 +1252,9 @@ find_free_pages:
 
 }
 ```
-這一部分程式碼將用於遍歷目標區域所有的zone，並從中找出第一個具有申請大小連續物理頁的zone。在程式碼中需要頻繁對64取餘數是因為，數組bits_map的資料型別是unsigned long每一項具有64位元，每個位元映射到物理內存的一個頁。考慮到zone的起始地址不一定是128MB的倍數(bits_map一項可以映射128MB)，所以引入變數tmp以解決對齊問題。函數會先透過page_free_count篩選出具有足夠空閒物理內存的zone，接著遍歷這個zone所代表的物理頁，利用bits_map去查找是否存在連續並且數量大於等於number的連續物理頁。尚未被使用的頁在bits_map對應的位元會被標示為0，根據這個特性可建立掩碼MASK，將掩碼與bits_map擷取出的值做與運算後即可判斷是否存在連續閒置的物理頁，如果運算結果為0說明找到了符合條件的連續物理頁，運算結果非0則代表部分物理頁被占用需繼續查找。接下來在main.c中測試alloc_pages申請連續的64個頁，並查看輸出結果。
+這一部分程式碼將用於遍歷目標區域所有的zone，並從中找出第一個具有申請大小連續物理頁的zone。在程式碼中需要頻繁對64取餘數是因為數組bits_map的資料型別是unsigned long每一項具有64位元，每個位元映射到物理內存的一個頁。考慮到zone的起始地址不一定是128MB的倍數(bits_map一項可以映射128MB)，所以引入變數tmp以解決對齊問題。函數會先透過page_free_count篩選出具有足夠空閒物理內存的zone，接著遍歷這個zone所代表的物理頁，利用bits_map去查找是否存在連續並且數量大於等於number的連續物理頁。尚未被使用的頁在bits_map對應的位元會被標示為0，根據這個特性可建立掩碼MASK，將掩碼與bits_map擷取出的值做與運算後即可判斷是否存在連續閒置的物理頁，如果運算結果為0說明找到了符合條件的連續物理頁，運算結果非0則代表部分物理頁被占用需繼續查找。接下來在main.c中測試alloc_pages申請連續的64個頁，並查看輸出結果。
 ```
+kernel/main.c
 void Start_Kernel(void)
 {
     ...
@@ -1255,18 +1276,18 @@ void Start_Kernel(void)
     ...
 }
 ```
-![image](https://hackmd.io/_uploads/rkl1Kv750.png)
+![image](./image/ch4/bochs4.png)
 可看到這64個頁的屬性被設為0x91，且物理地址從0X200000處(2MB處)開始建立64個連續的頁。至於為何從0x200000開始，這是因為在此之前我們只註冊了2MB的頁用於放置kernel程式與內存管理信息等內容。
 
 ## 中斷處理
 這一節主要討論由PIC(Programmable Interrupt Controller)發出的中斷，這些中斷可以被註冊到IDT上，當發生項應的中斷時處理器就會跳轉做相對應的中斷/異常處理函式。intel處理器只由一個外部中斷引腳INTR，這腳負責接收來自PIC的信息，而PIC則負責彙總所有發生的中斷，在根據各IRQ的屬性來決定中斷是否被屏蔽或是送至CPU。書中在本節先以8259A PIC作為入門晶片。
 ### 8259A PIC
-![8259A PIC](https://hackmd.io/_uploads/r13oltQc0.png)
+![8259A PIC](./image/ch4/8254A_PIC.png)
 圖片擷取自 一個64位操作系統的設計與實現 圖4-18
 在圖中8259A晶片做為主晶片，直接與CPU的INTR相連，另外其IRQ2腳位則與從晶片相連。
 8259A具有可配置的兩組暫存器，分別為ICW (InitializationCommand Word，初始化命令字)與OCW（Operational Control Word，操作控制字）。在8259A PIC工作前必須先使用ICW配置暫存器組，而OCW則用於操作中斷控制器，可用於調整中斷控制器的工作方式。
 PC上採用I/O地址映射方式，這些暫存器將被映射到I/O端口的地址空間，必須使用指令IN與OUT來讀取或是寫入暫存器。對於8259A PIC的主晶片其I/O端口為20h與21h而從晶片則為a0h與a1h，透過這些I/O端口可操作ICW與OCW從而操控IRR、PR、ISR、IMR等暫存器。
-![8259A和CPU的關係圖](https://hackmd.io/_uploads/Hk569bEcC.png)
+![8259A和CPU的關係圖](./image/ch4/8259A_and_CPU.png)
 圖片擷取自 一個64位操作系統的設計與實現 圖4-19
 IRR(Interrupt Request Register，中斷請求暫存器)用以保存IR0~IR7共8個引腳的中斷請求，這個暫存器有8bits分別對應IR0-IR7。而IMR(Interrupt Mask Register，中斷屏蔽暫存器)同樣具有8bits，用以紀錄被屏蔽的引腳，如果被置位PIC就會屏蔽來自該引腳的信息，並忽略他。PR(（Priority Resolver，優先級解析器)從IRR暫存器中選取中斷請求中最高優先級的，發送信息給ISR(In-Service Register，正在服務暫存器)。ISR暫存器紀錄著待處理的中斷請求。8259A晶片會項CPU傳遞INT中斷信號，並且CPU會在執行完每個指令後檢測是否接收到INT信號，如果有接收到且CPU不處於屏蔽中斷狀態，CPU會返回INTA信息給8259A(表示接收到中斷)，此時8259A就會把這個信息保存到ISR中並復位IRR暫存器的信號位。隨後CPU會在向8259A發送第二個INTA信號，這是為了通知8259A把中斷向量號(8bit數據)送到數據總線上提供CPU讀取，當CPU接收到中斷向量號時可以檢索對應的IDT描述符並調轉到對應的處理程式。
 而ISR的復位有兩種方式這取決於8259A晶片採取AEOI(Automatic End of Interrupt，自動結束中斷)或是非自動，前者在接收到CPU傳送的第2個INTA時就會復位ISR，而後者則必須等待CPU在中斷處理程式的結尾處傳送EOI(End of Interrupt，結束中斷命令)來復位ISR，如果中斷請求來自從晶片(IRQ8~IRQ15)，則必需傳送兩個EOI(這是指復位IRQ2和從晶片對應的IRQ)。
@@ -1389,7 +1410,7 @@ D6=1，D7=1這是特殊循環模式，代表在循環模式的基礎上將D0~D2�
  * );
  */
  
- #define IRQ_NAME2(nr) nr##_interrupt(void)
+#define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 
 #define Build_IRQ(nr)   \
@@ -1449,11 +1470,11 @@ void init_interrupt()
 }
 ```
 io_out8是內嵌組合語言指令放在lib.h，用於輸出數據到指定I/O端口。最後操作OCW1使得PIC的所有中斷指令都可以傳輸到CPU而不會被屏蔽，而sti則用於恢復CPU中斷(置位EFLAGS暫存器的中斷標誌位IF)。接著我們來測試PIC是否有初始化成功。
-![測試畫面](https://hackmd.io/_uploads/Hy8lL5EqC.png)
+![測試畫面](./image/ch4/bochs5.png)
 可以注意到畫面上重複印出do_IRQ:0x20，這對應的是IRQ0定時器所產生的中斷，如此PIC便初始化成功了，接下來我們來實現鍵盤驅動(IRQ1)。
 
 ### 鍵盤驅動
-![鍵盤控制器鏈路示意圖](https://hackmd.io/_uploads/SkZPBj4qR.png)
+![鍵盤控制器鏈路示意圖](./image/ch4/keyboard.png)
 當8048鍵盤控制器檢測到按鍵被按下時會將該鍵位對應的編碼值傳送到8042鍵盤控制器晶片中，並由8024晶片將此編碼值解析成統一的鍵盤掃描碼，並輸出到鍵盤緩衝區中等待處理器處理，需要注意的是如果緩衝區沒有被清空8042晶片就不會接收新的數據。
 計盤掃描碼總共有3套:第1套為原始的XT掃描碼集，第2套為AT掃描碼集，第三套為PS/2掃描碼集(少用)。現今鍵盤接默認使用AT鍵盤掃描碼，但出於兼容性考量AT掃描碼最後會轉換成XT掃描碼供處理器使用(也可不換成XT但這樣需要另做配置)。
 XT掃描碼的特點為每個按鍵的碼由1byte組成，bit0-bit6代表按鍵的掃描碼，而bit7則代表按鍵狀態(0:按下，1:鬆開)。按下按鍵時鍵盤控制器的輸出稱為make code，而鬆開時則稱為break code。此外有些擴展按鍵使用2byte的掃描碼，按此按鍵被按下時鍵盤控制器會產生兩個中斷請求，第一個中斷請求會向處理器發送0xe0前綴，第二個中斷請求則向處理器發送1byte的make code，而鬆開時一樣產生兩個中斷請求，發送前綴0xe0在發送break code。另外還有2個特殊按鍵PrtScn與Pause/Break，前者會發送兩個含有擴展碼前綴的碼xe0、0x2a、0xe0、0x37，而鬆開時也會收到2組包含前綴的擴展碼生0xe0、0xb7、0xe0、0xaa。而Pause/Break則只有在按下時才產生掃描碼0xe1、0x1d、0x45、0xe1、0x9d、0xc5，鬆開時不會有任何回應。鍵盤控制器同樣使用I/O端口地址映射方式，需要透過組合語言指令IN、OUT輸入與輸出資料，其I/O端口為60h與64h，60h的暫存器用於讀寫緩衝區，而64h則用於讀取暫存器狀態或是發送控制命令給晶片。
@@ -1480,11 +1501,10 @@ void do_IRQ(unsigned long regs, unsigned long nr)	//regs:rsp,nr
 }
 ```
 在這裡我們什麼都不做只是輸出鍵盤的掃描碼，以下為輸出結果。可利用佇列實現緩衝區紀錄鍵盤的輸出結果，並建立按鍵的映射關係即可完成簡易的輸入與輸出。
-![輸出結果](https://hackmd.io/_uploads/SJ2-Zp490.png)
+![輸出結果](./image/ch4/bochs6.png)
 
 ### 行程排程管理
 Process為程式維護運行時的各種資源，如:行程ID(PID)、行程的頁表、行程執型現場的暫存器值、行程各個段的地址空間信息與維護信息等，這些資源會被友組茲的結構劃到PCB(Process Control Block，行程控制結構體)中，並作為爬承調度的決策信息提供調度的演算法使用。調度策略將直接影響系統地執行效能。Linux就曾經使用過O1算法、RSDL算法、CFS算法等。
-**PCB
 
 PCB用於紀錄與統整行程的資源使用狀況和運行態信息(包括硬體與軟體)。struct task_struct是此系統的第一版PCB，以下的結構體接定義在task.h中。
 ```
@@ -1548,9 +1568,9 @@ struct thread_struct {
     unsigned long error_code; // 異常的錯誤碼
 };
 ```
-![核心stack結構](https://hackmd.io/_uploads/SkcJyJrqC.png)
-圖片擷取自 一個64位操作系統的設計與實現 圖4-24
-**需要注意這張圖把struct task_struct誤植成struck task_struck**
+![核心stack結構](./image/ch4/kernel_stack.png)
+圖片擷自 一個64位操作系統的設計與實現 圖4-24
+**注意這張圖把struct task_struct誤植成struck task_struck**
 
 在linux核心中核心stack中間與struct task_struct相鄰，低地址處放truct task_struct，高地址則是stack。其中stack與struct task_struct的空間大小被巨集STACK_SIZE所定義為32768(32KB) (先暫時定義為32KB若空間不足時再擴充)。整個空間用聯合體union所定義。
 ```
