@@ -9,8 +9,8 @@
 
 這裡主要紀錄學習過程中的心得與遇到的一些問題，progress資料夾內放置每一章節的程式碼進度，而note資料夾則為相應的筆記。
 
-[第3章 bootloader](./note/ch3.md)
-[第4章 核心層](./note/ch4.md)
-[第5章 應用層](./note/ch5.md)
-[第8章 核心主程式](./note/ch8.md)
-[第9章 高級內存管理單元](./note/ch9.md)
+[第3章 bootloader](./note/ch3.md)  
+[第4章 核心層](./note/ch4.md)  
+[第5章 應用層](./note/ch5.md)  
+[第8章 核心主程式](./note/ch8.md)  
+[第9章 高級內存管理單元](./note/ch9.md)  
