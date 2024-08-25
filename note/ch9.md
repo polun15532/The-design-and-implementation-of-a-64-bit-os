@@ -1,7 +1,7 @@
 # <<一個64位操作系統的設計與實現>> 第九章 高級內存管理單元 學習筆記
 在這一章完我們將完善內存分配和頁表初始化等功能，並借助SLAB分配器完成動態內存的分配器，以此解決程式長時間運行後內存破碎化的問題。
 ## SLAB內存池
-![image](https://hackmd.io/_uploads/H15AG_CqC.png)
+![image](./image/ch9/slab.png)
 圖一、SLAB內存池結構 圖片取自 <<一個64位操作系統的設計與實現>>
 ```
 kernel/memory.h
@@ -506,7 +506,7 @@ kmalloc是一個用於核心層的內存分配函式，他根據slab架構分配
 >1.參數檢查: 檢查請求的內存大小是否超過1MB。若超過則打印錯誤信息並返回NULL。
 >2.選擇合適的內存池: 遍歷`kmalloc_cache_size`，找到第一個大小大於或等於請求大小的內存池。
 >3.分配內存: 若內存池仍有空閒內存塊，則遍歷內存池中的Slab結構，直到找到地一個有空閒內存塊的Slab，如果沒有空閒內存塊，則調用kmalloc_create建立新的slab，並添加到內存池中。
-4.分配具體的內存塊: 遍歷slab->color_map，找到一塊未使用的內存塊，標記為已使用，並返回此內存塊的地址。
+>4.分配具體的內存塊: 遍歷slab->color_map，找到一塊未使用的內存塊，標記為已使用，並返回此內存塊的地址。
 
 kmalloc_create函式用在cache_pool中無可用的內存塊時，建立新的struct Slab結構體。
 ```
@@ -649,7 +649,7 @@ unsigned long kfree(void *address)
 ```
 kfree每次釋放內存塊都需要遍歷kmalloc_cache_size中的頁，直到找到目標頁，時間複雜度為O(n)，對於那些需要經常釋放的內存塊很不友好。
 接著根據書上的指示在Start_Kernek中添加kmalloc申請內存塊的程式碼，用以測試kmalloc、kmalloc_create函式與slab分配器是否可正常工作。
-![bochs平台執行結果](https://hackmd.io/_uploads/HkS5r-vjR.png)
+![bochs平台執行結果](./image/ch9/kmalloc_test.png)
 圖二、slab分配器測試結果。
 上圖為在bochs平台中的執行結果，在這裡我一次申請的7個1MB的頁，因此調用了kmalloc_create函式3次以取得page。
 
@@ -928,7 +928,7 @@ void frame_buffer_init()
 ```
 由於指標無法做乘除或是位元運算，為求方便這裡使用unsigned long FB_addr與unsigned long base_addr分別做為Frame buffer與一級頁表的物理地址，可以省下很多括號與類型轉換。
 這段程式的主要功能是將Frame buffer所占據的地址空間添加到頁表中。每當需要刷新螢幕顯示的信息，可以直接訪問這些內存地址來更新螢幕的內容。
-![image](https://hackmd.io/_uploads/HJzI4DOoR.png)
+![image](./image/ch9/page_table_init_test.png)
 圖三、頁表初始化與frame buffer地址重映射的測試圖
 
 圖三為bochs虛擬機的測試結果，在每個階段內會安插 init這類信息來確定這個初始化階段是否正常工作。原則上這些初始化工作是各自獨立互不影響，但為了更容易去調適程式碼，書中建議了sys_vector_init需最先執行。

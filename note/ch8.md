@@ -56,7 +56,7 @@ SECTIONS
 在SECTION的開始，利用符號 . 將程式的起始線性地址定位到0xffff800000000000處，因此核心程式的.text就是從這個地址開始。而腳本內的*(.text)正則表達式，*用於匹配所有輸出文件的程式碼段。而夾在前後的了_text、_etext標誌符來標記.text的起始地址與結束地址，可在C語言中以extern引用。
 
 **作業系統的線性地址劃分**
-![image](https://hackmd.io/_uploads/H19yRRT9A.png)
+![image](./image/ch8/address.png)
 在這個系統中把物理內存的前4GB作為固定映射的空間將線性地址減上PAGE_OFFSET即為物理地址，而其他的合法線性地址則屬於非固定應社區交由內存管理系統調配，並允許多個線性地址映射到同一物理頁。
 
 ## 處理器的硬體信息
@@ -122,7 +122,7 @@ void init_cpu(void)
 	color_printk(WHITE, BLACK, "MAX Extended Operation Code :%#010x\n",CpuFacName[0]);
 }
 ```
-![image](https://hackmd.io/_uploads/rJqc-Z05C.png)
+![image](./image/ch8/bochs1.png)
 這是BOCHS虛擬機的執行結果，顯示了CPU的硬體信息。如產品號為Intel(R) Core i7-4770 CPU @3.40 GHz。物理地址循址位寬為40位元，線係地址循址位寬為48位元。
 下表為CPUID主功能號的返回信息。
 
