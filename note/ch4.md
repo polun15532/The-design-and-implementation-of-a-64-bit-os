@@ -1694,7 +1694,7 @@ static inline struct task_struct *get_current()
 
 **初始化行程**
 
-行程間的切換必須在由核心所提供的公共區域進行。核心空間用於處理所有行程對系統的操作請求包括行程交換等等。(書中8.4節將介紹作業系統的地址空間分布)![行程切換](https://hackmd.io/_uploads/Hkzj1-S9A.png)
+行程間的切換必須在由核心所提供的公共區域進行。核心空間用於處理所有行程對系統的操作請求包括行程交換等等。(書中8.4節將介紹作業系統的地址空間分布)![行程切換](./image/ch4/context_switch.png)
 圖片擷取自 一個64位操作系統的設計與實現 圖4-25
 ```
 #define switch_to(prev,next)                        \
@@ -1938,9 +1938,9 @@ task.o: task.c
 ```
 
 ### 執行上下文切換時遇到的問題 (#GP)
-![image](https://hackmd.io/_uploads/Hypk4_DqR.png)
+![image](./image/ch4/bochs7.png)
 在Bochs虛擬機模擬的畫面中可看到系統觸發了GP(general protection)，並且段選擇子為0x00，這個選擇子對應GDT表的第1個元素，此描述符被定義為NULL。
-![image](https://hackmd.io/_uploads/HkN-4uwcA.png)
+![image](./image/ch4/bochs8.png)
 觀察Bochs打印出的錯誤可以看到以下提示`access_read_linear(): canonical failure`這代表出現了一個不規範的地址，這有可能是因為訪問了一個無效的內存地址或內存訪問越界等等。從Bochs虛擬機打印的信息可看到發生錯誤的指令地址為rip:ffff80000010a197，接著我們反組譯system可以看到以下結果。
 在地址0xffff80000010a197的ret指令將從stack中pop返回地址，而正是這個返回地址是無效的。
 ```
@@ -1970,8 +1970,8 @@ do{                                                 \
 }while(0)
 ```
 `pushq  %3`這個被壓入stack上的操作數就是返回地址，而第三個操作數是next->thread->rip，可以斷定就是此變數的地址出錯。
-![image](https://hackmd.io/_uploads/ByHOc9vq0.png)
-有了這個推斷我在進入switch_to函數前打印next->thread->rip的值，其表示的地址為0x800000007c00ffff，對於64位系統在大多數的計算機上只使用48位原來取址，剩下的BIT47-BIT63必須全數為0或是1，而我們接收到的rip地址顯然不符合此規則，因此觸發了GP。而這個RIP地址是由kernel_thread所寫入的kernel_thread_func。
+![image](./image/ch4/bochs9.png)
+有了這個推斷我在進入switch_to函數前打印next->thread->rip的值，其表示的地址為0x800000007c00ffff，對於64位系統在大多數的計算機上只使用48位元來取址，剩下的BIT47-BIT63必須全數為0或是1，而我們接收到的rip地址顯然不符合此規則，因此觸發了GP。而這個RIP地址是由kernel_thread所寫入的kernel_thread_func。
 ```
 extern void kernel_thread_func(void);
 __asm__ (
@@ -1988,5 +1988,5 @@ __asm__ (
 );
 ```
 接著將標籤補上關鍵字.global使得標籤kernel_thread_func變得全局可見，執行結果如以下所示。
-![image](https://hackmd.io/_uploads/SkOZUsDcA.png)
+![image](./image/ch4/bochs10.png)
 可看到任務成功的執行與退出，可推斷GP異常發生的原因是`extern void kernel_thread_func(void)`與`kernel_thread_func:`沒有正確連結所導致的。

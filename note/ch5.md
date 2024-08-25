@@ -1,8 +1,8 @@
 # <<一個64位操作系統的設計與實現>> 第五章 應用層 學習筆記
 ## 跳轉到應用層
-應用層的權級為3這這是最低特權級，這使得他們無法直接的操作硬體設備也不具有配置處理器的能力，因此若想要從核心層前往應用層就必須由作業系統提供目標的程式碼段與資料段和其他跳轉信息。而為了達到這點應用程式會有統一的接口。比如在我們撰寫的c語言程式帶有`int main(){};`就是這個原因，系統可以透跳轉到main來達到執行應用程式的效果。
+應用層的權級為3這這是最低特權級，這使得他們無法直接的操作硬體設備也不具有配置處理器的能力，因此若想要從核心層前往應用層就必須由作業系統提供目標的程式碼段與資料段和其他跳轉信息。而為了做到這點應用程式會有統一的接口。比如在我們撰寫的c語言程式帶有`int main(){};`。
 在這一章節書中先以call與RET在不同權級間的操作開始討論。
-![image](https://hackmd.io/_uploads/HkHtG5d5R.png)
+![image](./image/ch5/stack.png)
 以下是書中描述程式借助call gate訪問不同權級的stack切換流程。
 >1.檢測目標程式的訪問權限(針對段模式的特權權級進行檢查)。
 >2.把SS、ESP、CS、EIP暫存器的值保存在處理器內部，以被調用返回時使用(為程式碼的段選擇子、RIP?)
@@ -22,7 +22,7 @@
 >6.處理器繼續執行調用者程式。
 
 由於RET類指令的執行速度較慢，intel推出新的指令SYSENTER/SYSEXIT以實現快速的系統調用。SYSENTER/SYSEXIT執行的優點為調用過程中不會將執行數據壓入stack中，如此可以省下訪問內存的時間消耗，並且在跨權級跳轉時不會檢查段描述符。但是SYSENTER只支持權級0到權級3的跳轉，而SYSEXIT僅能從權3跳轉到權級0，兩個指令都不可在同權級或其他權級的之間跳轉。所以這類指令只可以為應用程式係供系統調用，不可以在核心層使用，另外中斷型的系統調用可以在任何權級進行。下圖為intel官方手冊中關於SYSENTER/SYSEXIT指令的描述。
-![image](https://hackmd.io/_uploads/BJGUYx9cR.png)
+![image](./image/ch5/sysexit.png)
 
 圖片擷取自 Intel® 64 and IA-32 Architectures Software Developer’s Manual Vol.2b
 **SYSEXIT**
@@ -62,7 +62,7 @@ ENTRY(ret_system_call)
 ```
 rax暫存器保存此系統調用的返回值，將這個值保存在rsp+0x80這個位置，最後一個`pop %rax`會恢復這個值，而`addq $0x38, %rsp`則是為了將其他7個參數從stack上彈出以平衡stack指針。在上一章中有提到這種切換行程的操作，考慮到統一因素，涉及儲存或還原現場的操作會與中斷/異常處理相同。這個0x38則是為了將FUNC、ERRCODE、RIP、CS、RFLGS、OLDRSP、OLDSS、從stack上彈出。另外`.byte 0x48`這個前綴則是修飾SYSEXIT指令告訴他現在使用64位元操作數(SYSEXIT默認操作數不是64位元)。另外RCX與RDX分別儲存應用程式的RIP與RSP使用SYSEXIT指令後就會者此兩個暫存器的值放到RIP與RSP中實現跳轉。
 IA32_SYSENTER_CS這個暫存器將記錄0級的程式碼段，為了讓SYSEXIT可以索引到目標的段選擇子，我們需要設定GDT的段描述符。下圖為GDT描述符的結構。
-![image](https://hackmd.io/_uploads/H1US01FqR.png)
+![image](./image/ch5/segament_descriptor.png)
 我們需要在文件kernel/head.S中增添兩個段描述符分別位於GDT+3與GDT+4的位置。
 ```
 kernel/entry.S
@@ -88,7 +88,7 @@ setup_TSS64:
     movq    %rdx,   88(%rdi)
     ...
 ```
-在這裡RDI儲存的是GDT_Table的地址，由於TSS描述符和IDT描述符一樣都是16byte，戰局兩個段描述符的大小，考慮到對齊我們必須空掉GDT+9把TSS放置在GDT+10的位置，因此設定`movq %rax, 80(%rdi)`，另外`shrq $32, %rdx`是為了提取TSS描述符地址的高32位元並把他寫到%rdi+88的地址。並修改在kernel/main.c寫入的TSS描述符的位置。
+在這裡RDI儲存的是GDT_Table的地址，由於TSS描述符和IDT描述符一樣都是16byte，佔據兩個段描述符的大小，考慮到對齊我們必須跳過GDT+9把TSS放置在GDT+10的位置，因此設定`movq %rax, 80(%rdi)`，另外`shrq $32, %rdx`是為了提取TSS描述符地址的高32位元並把他寫到%rdi+88的地址。並修改在kernel/main.c寫入的TSS描述符的位置。
 ```
 kernel/main.c
 void Start_Kernel(void)
@@ -110,7 +110,7 @@ unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned 
 }
 ```
 另外為了啟用SYSEXIT指令，必須在初始化任務時一並加載權級0的程式碼段選擇子到IA32_SYSENTER_CS暫存器，而暫存器在MSR暫存器組的地址0x174處。以下是針對kernel/tasl.c檔案的修改。另外IA32_SYSENTER_CS暫存器要寫入的值只有前16位有作用其他位必須為0，這是因為GDT描述符最多可以有8192個並且段描述符大小為8byte(8192*8=2^16)。
-![image](https://hackmd.io/_uploads/S19C2EY5A.png)
+![image](./image/ch5/IA32_SYSENTER_CS.png)
 ```
 kernel/task.c
  void task_init()
@@ -190,10 +190,10 @@ __PDE:
 ```
 下圖為Intel 64 and IA-32 Architectures
 Software Developer’s Manual vol.3a對於頁的描述
-![image](https://hackmd.io/_uploads/HkhX96K90.png)
-![image](https://hackmd.io/_uploads/SJt8jItqC.png)
+![image](./image/ch5/Paging_structure.png)
+![image](./image/ch5/2MB_page_format.png)
 根據書上所提供的資訊，如果我們想讓應用層的程式可以執行而不發生page fault就必須為應用程式的程式碼段與資料段的物理頁提應用層的權限，必須置位bit position=2的位元。
-![image](https://hackmd.io/_uploads/ByTmX0K5A.png)
+![image](./image/ch5/bochs1.png)
 如果實際執行程式你會發現畫面的最後一樣彈出一個異常。這是因為在函式do_execve中，我們僅僅是粗暴的把執行函式user_level_function搬運到地址0x800000。反組譯user_level_function的結果如下所示。
 ```
 ffff800000109b3b <user_level_function>:
@@ -205,7 +205,7 @@ ffff800000100166:	e8 81 45 00 00  call   ffff8000001046ec <color_printk>
 
 ## 實現系統調用api
 在這一節會補衝系統調用api的主體框架。以SYSENTER指令完成應用層到核心層的跳轉。
-![image](https://hackmd.io/_uploads/rynMYeqcA.png)
+![image](./image/ch5/sysenter.png)
 圖片擷取自 Intel® 64 and IA-32 Architectures Software Developer’s Manual Vol.2b
 
 **IA32_SYSENTER_CS**:位於MSR暫存器組的174h處，此暫存器低16位元將加載0特權級別的程式碼段選擇子，也用於索引0特權級別資料段選擇子。(IA32_SYSENTER_CS[15:0]+8)。(CS與SS對應的GDT描述符是相鄰的)。
@@ -255,7 +255,8 @@ unsigned long system_call_function(struct pt_regs *regs)
 {
     return system_call_table[regs->rax](regs);
 }
-
+```
+```
 kernel/task.h
 
 #define MAX_SYSTEM_CALL_NR 128
@@ -276,6 +277,7 @@ system_call_t system_call_table[MAX_SYSTEM_CALL_NR] = {
 在這裡定義系統調用的最大數量為128個。並且系統調用將透過system_call_table管理，由於目前尚未實作系統調用所以先設為no_system_call。透過`system_call_table[regs->rax](regs)`呼叫系統調用，其中regs->rax將紀錄使用的api向量號。
 由於SYSENTER與SYSEXIT在執行系統調用將會配對出現，因此SYSEXIT指令的RCX(用戶程式的RIP)與RDX(用戶程式的RSP)兩個參數必須在執行SYSENTER前就保存在這兩個暫存器內。
 ```
+kernel/task.c
 void user_level_function()
 {
     long ret = 0;
@@ -290,9 +292,9 @@ void user_level_function()
 }
 ```
 在這段程式碼中首先透過LEA指令取得標幟符sysexit_return_address的地址並保存到RDX暫存器，接著將RSP保存至RCX暫存器。這兩個暫存器提供了後續執行SYSEXIT的返回條件。SYSENTER可透過儲存在IA32_SYSENTER_EIP的地址跳轉報標幟符system_call中，接著保存系統環境後將執行system_call_function已完成系統調用。
-![image](https://hackmd.io/_uploads/SJI7zi55C.png)
+![image](./image/ch5/bochs2.png)
 上圖為程式的執行結果，系統確實可完成系統調用。
-![image](https://hackmd.io/_uploads/Hkiqzic90.png)
+![image](./image/ch5/bochs3.png)
 觀察程式的執行地址為0x800039，這表示我們確實成功返回應用層的程式了。另外在intel官方手冊有提到SYSENTER指令在操作過程中會復位RFLAGS的IF標幟位，因此在處理器進到核心後必須手動置位IF標幟位使得中斷可以發生。
 ```
 kernel/head.S
@@ -300,7 +302,7 @@ ENTRY(system_call)
     sti;
     ...
 ```
-![image](https://hackmd.io/_uploads/ByJ7Voc5A.png)
+![image](./image/ch5/bochs4.png)
 加上STI指令後又可以響應中斷了。
 
 ## 實現一個系統調用函式
@@ -320,6 +322,7 @@ system_call_t system_call_table[MAX_SYSTEM_CALL_NR] = {
 ```
 這段程式建立系統調用函式sys_printf，並把他放在向量號1，內部封裝了函式color_printk，並利用RDI傳遞字符串。
 ```
+kernel/task.c
 void user_level_function()
 {
     long ret = 0;
@@ -333,5 +336,5 @@ void user_level_function()
     while(1);
 }
 ```
-![image](https://hackmd.io/_uploads/HkSFIj9cR.png)
+![image](./image/ch5/bochs5.png)
 這樣就可以成功打印信息了。
