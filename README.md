@@ -14,3 +14,53 @@
 [第5章 應用層](./note/ch5.md)  
 [第8章 核心主程式](./note/ch8.md)  
 [第9章 高級內存管理單元](./note/ch9.md)  
+
+
+## BOCHS環境搭建
+
+這本書使用的bochs版本為2.6.8，但如果依照書上的說明安裝最新版的bochs會出現usb上的問題，因此建議使用2.7版本。如果僅作為模擬軟碟開機部模擬usb功能可以安裝2.6.8得版本，記得在configure時不要添加`--enable-usb`。 
+以下是我按照作者的指示安裝bochs 2.6.8出現的錯誤。
+```
+>>PANIC<< dlopen failed for module 'usb_uhci' (libbx_usb_uhci.so): file not found
+```
+此連結為相關的[討論串](https://sourceforge.net/p/bochs/discussion/39592/thread/58822184/)。  
+這是因為usb_uhci有未解析符號引起的。看了一些討論串如果安裝2.6.10以後版本就不會出現此問題。
+以下為作者提供的configure工具配置信息。  
+```
+./configure --with-x11 --with-wx \
+--enable-debugger \
+--enable-disasm \
+--enable-all-optimizations \ 
+--enable-readline \
+--enable-long-phy-add \
+ress--enable-ltdl-install \
+--enable-idle-hack \
+--enable-plugins \
+--enable-a20-pin \
+--enable-x86-64 \
+--enable-smp \
+--enable-cpu-level=6 \
+--enable-large-ramfile \
+--enable-repeat-speedups \
+--enable-fast-function-calls \
+--enable-handlers-chaining \
+--enable-trace-linking \
+--enable-configurable-msrs \
+--enable-show-ips \
+--enable-cpp \
+--enable-debugger-gui \
+--enable-iodebug \
+--enable-logging \
+--enable-assert-checks \
+--enable-fpu \
+--enable-vmx=2 \
+--enable-svm \
+--enable-3dnow \
+--enable-alignment-check \
+--enable-monitor-mwait \
+--enable-avx \
+--enable-evex \
+--enable-x86-debugger--enable-pci \
+--enable-usb \
+--enable-voodo \
+```
