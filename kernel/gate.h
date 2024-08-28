@@ -13,11 +13,11 @@ extern struct desc_struct GDT_Table[];
 extern struct gate_struct IDT_Table[]; // 這是head.S中的IDT_Table (因為加上.gobal所以可以在這裡使用)
 extern unsigned int TSS64_Table[26];
 
-#define _set_gate(gate_selector_addr,attr,ist,code_addr)	        \
-do {	unsigned long __d0,__d1;                                    \
+#define _set_gate(gate_selector_addr, attr, ist, code_addr)	        \
+do {	unsigned long __d0, __d1;                                    \
         __asm__ __volatile__    (   "movw   %%dx,   %%ax    \n\t"   \
                                     "andq   $0x7,   %%rcx   \n\t"   \
-                                    "addq   %4,     %%rcx    \n\t"  \
+                                    "addq   %4,     %%rcx   \n\t"  \
                                     "shlq   $32,    %%rcx   \n\t"   \
                                     "addq   %%rcx,  %%rax   \n\t"   \
                                     "xorq   %%rcx,  %%rcx   \n\t"   \
@@ -30,8 +30,7 @@ do {	unsigned long __d0,__d1;                                    \
                                     "movq   %%rdx,  %1      \n\t"   \
                                     :"=m"(*((unsigned long *)(gate_selector_addr))) , \
                                         "=m"(*(1 + (unsigned long *)(gate_selector_addr))),"=&a"(__d0),"=&d"(__d1) \
-                                    :"i"(attr << 8), \
-                                        "3"((unsigned long *)(code_addr)),"2"(0x8 << 16),"c"(ist) \
+                                    :"i"(attr << 8), "3"((unsigned long *)(code_addr)),"2"(0x8 << 16),"c"(ist) \
                                     :"memory" \
                                             );\
 } while(0)

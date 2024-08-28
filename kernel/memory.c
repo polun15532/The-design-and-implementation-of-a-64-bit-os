@@ -883,8 +883,8 @@ void pagetable_init()
             tmp = (unsigned long*)((unsigned long)Phy_To_Virt(*tmp & (~ 0xfffUL)) + (((unsigned long)Phy_To_Virt(p->PHY_address) >> PAGE_2M_SHIFT) & 0x1ff) * 8);
             // 將tmp轉換到3級頁表的目標項次(x86-64支援2MB的大頁目前的系統頁分配會以2MB為單位)。
             set_pdt(tmp, mk_pdt(p->PHY_address,PAGE_KERNEL_Page));
-            if(j % 50 == 0)
-                color_printk(GREEN, BLACK, "@:%#018lx,%#018lx\t\n", (unsigned long)tmp, *tmp);
+            //if(j % 50 == 0)
+            //    color_printk(GREEN, BLACK, "@:%#018lx,%#018lx\t\n", (unsigned long)tmp, *tmp);
         }
     }
     flush_tlb(); // 刷新TLB，使映射生效。

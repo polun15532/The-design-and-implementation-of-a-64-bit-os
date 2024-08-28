@@ -6,6 +6,12 @@
 #include "task.h"
 #include "interrupt.h"
 
+#if APIC
+#include "APIC.h"
+#else
+#include "8259A.h"
+#endif
+
 extern char _text;
 extern char _etext;
 extern char _edata;
@@ -55,11 +61,16 @@ void Start_Kernel(void)
     frame_buffer_init();
     color_printk(WHITE, BLACK,"frame_buffer_init() is OK \n");
 
-	color_printk(RED, BLACK, "pagetable init \n");	
-	pagetable_init();
+    color_printk(RED, BLACK, "pagetable init \n");	
+    pagetable_init();
 
     color_printk(RED,BLACK, "interrupt init \n");
-    init_interrupt();
+
+    #if APIC
+        APIC_IOAPIC_init();
+    #else
+        init_8259A();
+    #endif
 
     //color_printk(RED,BLACK,"task_init \n");
     //task_init();
