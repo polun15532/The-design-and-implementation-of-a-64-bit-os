@@ -339,7 +339,6 @@ void free_pages(struct Page *page, int number)
     }
 }
 
-
 void *kmalloc(unsigned long size, unsigned long gfp_flags)
 {
     int i, j;
@@ -490,43 +489,47 @@ unsigned long kfree(void *address)
 
     for (i = 0; i < 16; i++) {
         slab = kmalloc_cache_size[i].cache_pool;
-        for (; slab != kmalloc_cache_size[i].cache_pool; slab = container_of(list_next(&slab->list), struct Slab, list)) {
-            if (slab->Vaddress != page_base_address)
-                continue;
+        if (slab->Vaddress != page_base_address) {
+            slab = container_of(list_next(&slab->list), struct Slab, list);
+            for (; slab != kmalloc_cache_size[i].cache_pool && (slab->Vaddress != page_base_address); slab = container_of(list_next(&slab->list), struct Slab, list));
+        }
 
-            index = (address - slab->Vaddress) / kmalloc_cache_size[i].size;
-            slab->free_count++;
-            slab->using_count--;
-            kmalloc_cache_size[i].total_free++;
-            kmalloc_cache_size[i].total_using--;
+        if (slab->Vaddress != page_base_address)
+            continue;
 
-            if (slab->using_count == 0 && kmalloc_cache_size[i].total_free >= slab->color_count * 3 / 2
-                && kmalloc_cache_size[i].cache_pool != slab) {
-                switch(kmalloc_cache_size[i].size) {
-                    // slab + struct Slab 放置在頁末尾的狀況。
-                    case 32:
-                    case 64:
-                    case 128:
-                    case 256:
-                    case 512:
-                        list_del(&slab->list);
-                        kmalloc_cache_size[i].total_free -= slab->color_count;
-                        page_clean(slab->page);
-                        free_pages(slab->page, 1);
-                        break;
-                    default:
-                        list_del(&slab->list);
-                        kmalloc_cache_size[i].total_free -= slab->color_count;
-                        kfree(slab->color_map);
-                        page_clean(slab->page);
-                        free_pages(slab->page, 1);
-                        kfree(slab);
-                        break;
-                }
+        index = (address - slab->Vaddress) / kmalloc_cache_size[i].size;
+        slab->free_count++;
+        slab->using_count--;
+        kmalloc_cache_size[i].total_free++;
+        kmalloc_cache_size[i].total_using--;
+
+        if (slab->using_count == 0 && kmalloc_cache_size[i].total_free >= slab->color_count * 3 / 2
+            && kmalloc_cache_size[i].cache_pool != slab) {
+            switch(kmalloc_cache_size[i].size) {
+                // slab + struct Slab 放置在頁末尾的狀況。
+                case 32:
+                case 64:
+                case 128:
+                case 256:
+                case 512:
+                    list_del(&slab->list);
+                    kmalloc_cache_size[i].total_free -= slab->color_count;
+                    page_clean(slab->page);
+                    free_pages(slab->page, 1);
+                    break;
+                default:
+                    list_del(&slab->list);
+                    kmalloc_cache_size[i].total_free -= slab->color_count;
+                    kfree(slab->color_map);
+                    page_clean(slab->page);
+                    free_pages(slab->page, 1);
+                    kfree(slab);
+                    break;
             }
-        }    
+        }
+        return 1;    
     }
-     color_printk(RED, BLACK, "kfree() ERROR: can`t free memory\n");
+    color_printk(RED, BLACK, "kfree() ERROR: can`t free memory\n");
     return 0;   
 }
 
@@ -883,8 +886,8 @@ void pagetable_init()
             tmp = (unsigned long*)((unsigned long)Phy_To_Virt(*tmp & (~ 0xfffUL)) + (((unsigned long)Phy_To_Virt(p->PHY_address) >> PAGE_2M_SHIFT) & 0x1ff) * 8);
             // 將tmp轉換到3級頁表的目標項次(x86-64支援2MB的大頁目前的系統頁分配會以2MB為單位)。
             set_pdt(tmp, mk_pdt(p->PHY_address,PAGE_KERNEL_Page));
-            if(j % 50 == 0)
-                color_printk(GREEN, BLACK, "@:%#018lx,%#018lx\t\n", (unsigned long)tmp, *tmp);
+            //if(j % 50 == 0)
+            //    color_printk(GREEN, BLACK, "@:%#018lx,%#018lx\t\n", (unsigned long)tmp, *tmp);
         }
     }
     flush_tlb(); // 刷新TLB，使映射生效。

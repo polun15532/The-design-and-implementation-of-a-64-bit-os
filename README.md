@@ -18,7 +18,7 @@
 
 ## BOCHS環境搭建
 
-這本書使用的bochs版本為2.6.8，但如果依照書上的說明安裝最新版的bochs會出現usb上的問題，因此建議使用2.7版本。如果僅作為模擬軟碟開機部模擬usb功能可以安裝2.6.8得版本，記得在configure時不要添加`--enable-usb`。 
+這本書使用的bochs版本為2.6.8，但如果依照書上的說明安裝最新版的bochs會出現usb上的問題，因此建議使用2.7版本。如果僅作為模擬軟碟開機部模擬usb功能可安裝2.6.8，記得在configure時不要添加`--enable-usb`。 
 以下是我按照作者的指示安裝bochs 2.6.8出現的錯誤。
 ```
 >>PANIC<< dlopen failed for module 'usb_uhci' (libbx_usb_uhci.so): file not found
@@ -64,3 +64,5 @@ ress--enable-ltdl-install \
 --enable-usb \
 --enable-voodo \
 ```
+作者在第6章後就全面切換到物理平台，而這個作業系統我仍在bochs虛擬平台上模擬，因此我的.bochsrc文件設定會與作者不同。  
+除了原始的boot.img的軟碟驅動外，我另外加了兩個用於模擬硬碟的映像文件disk1.img和disk2.img並銜接至ata1驅動器。  

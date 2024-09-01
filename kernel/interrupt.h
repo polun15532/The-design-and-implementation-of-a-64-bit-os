@@ -14,12 +14,11 @@ typedef struct hw_int_type {
 } hw_int_controller;
 
 typedef struct {
-  hw_int_controller *controller;
-
-  char *irq_name;
-  unsigned long parameter;
-  void (*handler)(unsigned long nr, unsigned long parameter, struct pt_regs *regs);
-  unsigned long flags;  
+    hw_int_controller *controller;
+    char *irq_name;
+    unsigned long parameter;
+    void (*handler)(unsigned long nr, unsigned long parameter, struct pt_regs *regs);
+    unsigned long flags;  
 } irq_desc_T;
 
 #define NR_IRQS 24

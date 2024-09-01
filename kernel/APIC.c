@@ -115,8 +115,8 @@ void IOAPIC_pagetable_remap()
     tmp = Phy_To_Virt((unsigned long*)(*tmp & ~0xfffUL) + (((unsigned long)IOAPIC_addr >> PAGE_2M_SHIFT) & 0x1ff));
     set_pdt(tmp, mk_pdt(ioapic_map.physical_address, PAGE_KERNEL_Page | PAGE_PWT | PAGE_PCD));
 
-    color_printk(BLUE, BLACK, "ioapic_map.physical_address:%#010x\t\t\n", ioapic_map.physical_address);
-    color_printk(BLUE, BLACK, "ioapic_map.virtual_address:%#018lx\t\t\n", (unsigned long)ioapic_map.virtual_index_address);
+    // color_printk(BLUE, BLACK, "ioapic_map.physical_address:%#010x\t\t\n", ioapic_map.physical_address);
+    // color_printk(BLUE, BLACK, "ioapic_map.virtual_address:%#018lx\t\t\n", (unsigned long)ioapic_map.virtual_index_address);
     flush_tlb();
 }
 
@@ -127,6 +127,7 @@ void Local_APIC_init()
 
     get_cpuid(1, 0, &a, &b, &c, &d); // CPUID.01h可用於檢查是否支援xAPIC(edx)與x2APIC(ecx)
 
+    
     if((1 << 9) & d)
         color_printk(WHITE, BLACK, "HW support APIC&xAPIC\t");
     else
@@ -149,7 +150,7 @@ void Local_APIC_init()
                           :"memory");
     // 這段程式碼用rdmsr指令讀取IA32_APIC_BASE，然後將第10與第11位設為1並寫回MSR，表示啟用x2APIC與xAPIC。
 
-    color_printk(WHITE, BLACK, "eax:%#010x,edx:%#010x\t", x, y);
+    // color_printk(WHITE, BLACK, "eax:%#010x,edx:%#010x\t", x, y);
     
     if (x & 0xc00)
         color_printk(WHITE, BLACK, "xAPIC & x2APIC enabled\n");
@@ -167,7 +168,7 @@ void Local_APIC_init()
                           :"memory");
 
     // 通過wrmsr指令向SIV暫存器(0x80f)的第8與第12位設為1，表示啟用local APIC與禁止廣播EOI。
-    color_printk(WHITE,BLACK, "eax:%#010x, edx:%#010x\t", x, y);
+    // color_printk(WHITE,BLACK, "eax:%#010x, edx:%#010x\t", x, y);
 
     if(x & 0x100)
         color_printk(WHITE, BLACK, "SVR[8] enabled\n");
@@ -310,23 +311,11 @@ void APIC_IOAPIC_init()
 
 void do_IRQ(struct pt_regs *regs, unsigned long nr)
 {
-    unsigned char x;
     irq_desc_T *irq = &interrupt_desc[nr - 32];
 
-    x = io_in8(0x60); // 取得鍵盤控制器的數據
-    color_printk(BLUE, WHITE, "(IRQ:%#04x)\tkey code:%#04x\n", nr, x);
-
     if(irq->handler)
-        irq->handler(nr,irq->parameter,regs);
+        irq->handler(nr, irq->parameter, regs);
 
     if(irq->controller && irq->controller->ack)
         irq->controller->ack(nr);
-
-
-    __asm__ __volatile__( "movq $0x00,  %%rdx \n\t"
-                          "movq $0x00,  %%rax \n\t"
-                          "movq $0x80b, %%rcx \n\t"
-                          "wrmsr              \n\t"
-                          :::"memory");
-    // 0x80b為EOI暫存器的地址，將其設為0x00，表示告訴PIC中斷已完成。
 }

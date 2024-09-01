@@ -12,6 +12,11 @@
 #include "8259A.h"
 #endif
 
+#include "keyboard.h"
+#include "mouse.h"
+#include "disk.h"
+#include "block.h"
+
 extern char _text;
 extern char _etext;
 extern char _edata;
@@ -19,14 +24,12 @@ extern char _end;
 
 struct Global_Memory_Descriptor memory_management_struct = {{0},0};
 
+extern struct block_device_operation IDE_device_operation;
+
 void Start_Kernel(void)
 {
-    int *addr = (int *)0xffff800003000000;
+    char buf[512];
     int i;
-
-    struct Page *page = NULL;
-    void *tmp = NULL;
-    struct Slab *slab = NULL;
 
     Pos.XResolution = 1440;
     Pos.YResolution = 900;
@@ -72,8 +75,35 @@ void Start_Kernel(void)
         init_8259A();
     #endif
 
-    //color_printk(RED,BLACK,"task_init \n");
+    color_printk(RED, BLACK, "keyboard init \n");
+    keyboard_init();
+    
+    color_printk(RED, BLACK, "mouse init \n");
+    mouse_init();
+
+    color_printk(RED, BLACK, "disk init \n");
+    disk_init();
+
+    color_printk(PURPLE, BLACK,"disk write:\n");
+    memset(buf, 0x44, 512);
+    IDE_device_operation.transfer(ATA_WRITE_CMD, 15, 1, (unsigned char*)buf);
+
+    color_printk(PURPLE, BLACK,"disk read:\n");
+    memset(buf, 0x00, 512);
+    IDE_device_operation.transfer(ATA_READ_CMD, 15, 1, (unsigned char*)buf);
+
+    for(i = 0 ;i < 512 ; i++)
+       color_printk(BLACK, WHITE, "%02x", buf[i]);
+
+    color_printk(PURPLE, BLACK, "\ndisk read end\n");
+
+    //color_printk(RED, BLACK, "task_init \n");
     //task_init();
 
-    while(1);
+    while (1) {
+        if(p_kb->count)
+            analysis_keycode();
+        if(p_mouse->count)
+            analysis_mousecode();
+    }
 }

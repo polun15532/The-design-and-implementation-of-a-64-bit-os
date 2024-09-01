@@ -172,7 +172,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
                     break;
 
                 case 's':
-                    s = va_arg(args,char *);
+                    s = va_arg(args, char *);
                     if (!s)
                         s = '\0';
                     len = strlen(s);
@@ -191,9 +191,9 @@ int vsprintf(char * buf,const char *fmt, va_list args)
                     break;
                 case 'o':
                     if(qualifier == 'l')
-                        str = number(str,va_arg(args,unsigned long),8,field_width,precision,flags);
+                        str = number(str,va_arg(args, unsigned long),8,field_width,precision,flags);
                     else
-                        str = number(str,va_arg(args,unsigned int),8,field_width,precision,flags);
+                        str = number(str,va_arg(args, unsigned int),8,field_width,precision,flags);
                     break;
                 case 'p':
                     if (field_width == -1) {
@@ -201,31 +201,31 @@ int vsprintf(char * buf,const char *fmt, va_list args)
                         flags |= ZEROPAD;
                     }
 
-                    str = number(str,(unsigned long)va_arg(args,void *),16,field_width,precision,flags);
+                    str = number(str,(unsigned long)va_arg(args, void *),16,field_width,precision,flags);
                     break;
                 case 'x':
                     flags |= SMALL;
                 case 'X':
                     if(qualifier == 'l')
-                        str = number(str,va_arg(args,unsigned long),16,field_width,precision,flags);
+                        str = number(str,va_arg(args, unsigned long), 16, field_width,precision,flags);
                     else
-                        str = number(str,va_arg(args,unsigned int),16,field_width,precision,flags);
+                        str = number(str,va_arg(args, unsigned int), 16, field_width,precision,flags);
                     break;
                 case 'd':
                 case 'i':
                     flags |= SIGN;
                 case 'u':
                     if(qualifier == 'l')
-                        str = number(str,va_arg(args,unsigned long),10,field_width,precision,flags);
+                        str = number(str,va_arg(args, long), 10, field_width,precision,flags);
                     else
-                        str = number(str,va_arg(args,unsigned int),10,field_width,precision,flags);
+                        str = number(str,va_arg(args, int), 10, field_width,precision,flags);
                     break;
                 case 'n':
                     if(qualifier == 'l') {
-                        long *ip = va_arg(args,long *);
+                        long *ip = va_arg(args, long*);
                         *ip = (str - buf);
                     } else {
-                        int *ip = va_arg(args,int *);
+                        int *ip = va_arg(args, int*);
                         *ip = (str - buf);
                     }
                     break;

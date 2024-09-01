@@ -605,46 +605,50 @@ unsigned long kfree(void *address)
     struct Slab *slab = NULL;
     void *page_base_address = (void*)((unsigned long)address & PAGE_2M_MASK); // 取得該內存塊所在的頁的基地址。
 
-    for (i = 0; i < 16; ++i) {
+    for (i = 0; i < 16; i++) {
         slab = kmalloc_cache_size[i].cache_pool;
-        for (; slab != kmalloc_cache_size[i].cache_pool; slab = container_of(list_next(&slab->list), struct Slab, list)) {
-            if (slab->Vaddress != page_base_address)
-                continue;
+        if (slab->Vaddress != page_base_address) {
+            slab = container_of(list_next(&slab->list), struct Slab, list);
+            for (; slab != kmalloc_cache_size[i].cache_pool && (slab->Vaddress != page_base_address); slab = container_of(list_next(&slab->list), struct Slab, list));
+        }
 
-            index = (address - slab->Vaddress) / kmalloc_cache_size[i].size;
-            slab->free_count++;
-            slab->using_count--;
-            kmalloc_cache_size[i].total_free++;
-            kmalloc_cache_size[i].total_using--;
+        if (slab->Vaddress != page_base_address)
+            continue;
 
-            if (slab->using_count == 0 && kmalloc_cache_size[i].total_free >= slab->color_count * 3 / 2
-                && kmalloc_cache_size[i].cache_pool != slab) {
-                switch(kmalloc_cache_size[i].size) {
-                    // slab + struct Slab 放置在頁末尾的狀況。
-                    case 32:
-                    case 64:
-                    case 128:
-                    case 256:
-                    case 512:
-                        list_del(&slab->list);
-                        kmalloc_cache_size[i].total_free -= slab->color_count;
-                        page_clean(slab->page);
-                        free_pages(slab->page, 1);
-                        break;
-                    default:
-                        list_del(&slab->list);
-                        kmalloc_cache_size[i].total_free -= slab->color_count;
-                        kfree(slab->color_map);
-                        page_clean(slab->page);
-                        free_pages(slab->page, 1);
-                        kfree(slab);
-                        break;
-                }
+        index = (address - slab->Vaddress) / kmalloc_cache_size[i].size;
+        slab->free_count++;
+        slab->using_count--;
+        kmalloc_cache_size[i].total_free++;
+        kmalloc_cache_size[i].total_using--;
+
+        if (slab->using_count == 0 && kmalloc_cache_size[i].total_free >= slab->color_count * 3 / 2
+            && kmalloc_cache_size[i].cache_pool != slab) {
+            switch(kmalloc_cache_size[i].size) {
+                // slab + struct Slab 放置在頁末尾的狀況。
+                case 32:
+                case 64:
+                case 128:
+                case 256:
+                case 512:
+                    list_del(&slab->list);
+                    kmalloc_cache_size[i].total_free -= slab->color_count;
+                    page_clean(slab->page);
+                    free_pages(slab->page, 1);
+                    break;
+                default:
+                    list_del(&slab->list);
+                    kmalloc_cache_size[i].total_free -= slab->color_count;
+                    kfree(slab->color_map);
+                    page_clean(slab->page);
+                    free_pages(slab->page, 1);
+                    kfree(slab);
+                    break;
             }
-        }    
+        }
+        return 1;    
     }
- 	color_printk(RED, BLACK, "kfree() ERROR: can`t free memory\n");
-	return 0;   
+    color_printk(RED, BLACK, "kfree() ERROR: can`t free memory\n");
+    return 0;   
 }
 ```
 kfree每次釋放內存塊都需要遍歷kmalloc_cache_size中的頁，直到找到目標頁，時間複雜度為O(n)，對於那些需要經常釋放的內存塊很不友好。  

@@ -5,7 +5,6 @@ make
 sudo dd if=boot.bin of=../boot.img bs=512 count=1 conv=notrunc
 cd ../kernel
 make
-
 cd ..
 
 sudo mount boot.img /media/ -t vfat -o loop
