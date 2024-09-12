@@ -88,11 +88,11 @@ Label_Start:
 
     cli                            ; 禁用CPU中斷，防止進入保護模式實受到干擾。
 
-    db     0x66                   ; 表示接下來指令是32位操作。
-    lgdt    [GdtPtr]            ; 加載GDT
+    db     0x66                    ; 表示接下來指令是32位操作。
+    lgdt    [GdtPtr]               ; 加載GDT
 
     mov     eax,    cr0
-    or     eax,    1              ; 將cr0的bit0設為1代表要切換到保護模式。
+    or     eax,    1               ; 將cr0的bit0設為1代表要切換到保護模式。
     mov     cr0,    eax
 
     mov     ax,     SelectorData32

@@ -1,5 +1,5 @@
 # 64-bit-operating-system
-參考書籍《一个64位操作系统的设计与实现》學習並實現一個64位元作業系統。  
+參考書籍《一个64位操作系统的设计与实现》學習並實現一個64位元作業系統。
 此專案用於記錄我的學習所得，從0開始實現64位元作業系統。這裡的程式碼多源自於書籍，有興趣的同學可參考作者田宇先生的[MINE操作系统](https://gitee.com/MINEOS_admin/publish)。  
 
 以下為我的系統環境  
@@ -16,7 +16,6 @@
 [第9章 高級內存管理單元](./note/ch9.md)  
 [第11章 設備驅動程式](./note/ch11.md)  
 
-
 ## BOCHS環境搭建
 
 這本書使用的bochs版本為2.6.8，但如果依照書上的說明安裝最新版的bochs會出現usb上的問題，因此建議使用2.7版本。如果僅作為模擬軟碟開機部模擬usb功能可安裝2.6.8，記得在configure時不要添加`--enable-usb`。  
@@ -28,13 +27,14 @@
 這是因為usb_uhci有未解析符號引起的。看了一些討論串如果安裝2.6.10以後版本就不會出現此問題。  
 以下為作者提供的configure工具配置信息。  
 ```
-./configure --with-x11 --with-wx \
+./configure \
+--with-x11 \
+--with-wx \
 --enable-debugger \
---enable-disasm \
---enable-all-optimizations \ 
+--enable-all-optimizations \
 --enable-readline \
---enable-long-phy-add \
-ress--enable-ltdl-install \
+--enable-long-phy-address \
+--enable-ltdl-install \
 --enable-idle-hack \
 --enable-plugins \
 --enable-a20-pin \
@@ -48,7 +48,6 @@ ress--enable-ltdl-install \
 --enable-trace-linking \
 --enable-configurable-msrs \
 --enable-show-ips \
---enable-cpp \
 --enable-debugger-gui \
 --enable-iodebug \
 --enable-logging \
@@ -61,9 +60,12 @@ ress--enable-ltdl-install \
 --enable-monitor-mwait \
 --enable-avx \
 --enable-evex \
---enable-x86-debugger--enable-pci \
+--enable-x86-debugger \
+--enable-pci \
 --enable-usb \
---enable-voodo \
+--enable-voodoo \
+--enable-pcidev
 ```
+
 作者在第6章後就全面切換到物理平台，而這個作業系統我仍在bochs虛擬平台上模擬，因此我的.bochsrc文件設定會與作者不同。  
 除了原始的boot.img的軟碟驅動外，我另外加了四個用於模擬硬碟的鏡像文件並銜接至ata0與ata1。  

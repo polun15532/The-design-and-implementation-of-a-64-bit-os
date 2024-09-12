@@ -93,8 +93,19 @@ Build_IRQ(0x35)
 Build_IRQ(0x36)
 Build_IRQ(0x37)
 
-void (* interrupt[24])(void)=
-{
+// IPI中斷向量號
+Build_IRQ(0xc8)
+Build_IRQ(0xc9)
+Build_IRQ(0xca)
+Build_IRQ(0xcb)
+Build_IRQ(0xcc)
+Build_IRQ(0xcd)
+Build_IRQ(0xce)
+Build_IRQ(0xcf)
+Build_IRQ(0xd0)
+Build_IRQ(0xd1)
+
+void (*interrupt[24])(void)= {
     IRQ0x20_interrupt,
     IRQ0x21_interrupt,
     IRQ0x22_interrupt,
@@ -121,6 +132,19 @@ void (* interrupt[24])(void)=
     IRQ0x37_interrupt,
 };
 
+void (*SMP_interrupt[10])(void) = {
+    IRQ0xc8_interrupt,
+    IRQ0xc9_interrupt,
+    IRQ0xca_interrupt,
+    IRQ0xcb_interrupt,
+    IRQ0xcc_interrupt,
+    IRQ0xcd_interrupt,
+    IRQ0xce_interrupt,
+    IRQ0xcf_interrupt,
+    IRQ0xd0_interrupt,
+    IRQ0xd1_interrupt,
+};
+
 int register_irq(unsigned long irq,
                  void *arg,
                  void (*handler)(unsigned long nr, unsigned long parameter, struct pt_regs *regs),
@@ -128,7 +152,7 @@ int register_irq(unsigned long irq,
                  hw_int_controller *controller,
                  char *irq_name)
 {
-    irq_desc_T *p = &interrupt_desc[irq - 32];
+    irq_desc_t *p = &interrupt_desc[irq - 32];
 
     p->controller = controller;
     p->irq_name = irq_name;
@@ -143,7 +167,7 @@ int register_irq(unsigned long irq,
 
 int unregister_irq(unsigned long irq)
 {
-    irq_desc_T *p = &interrupt_desc[irq - 32];
+    irq_desc_t *p = &interrupt_desc[irq - 32];
 
     p->controller->disable(irq);
     p->controller->uninstall(irq);

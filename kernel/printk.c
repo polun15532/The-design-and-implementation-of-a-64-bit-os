@@ -37,30 +37,33 @@ void frame_buffer_init()
     flush_tlb(); // 刷新TLB。
 }
 
-int color_printk(unsigned int FRcolor, unsigned int BKcolor, const char *fmt,...)
+int color_printk(unsigned int FRcolor, unsigned int BKcolor, const char *fmt, ...)
 {
     int i = 0;
     int count = 0;
     int line = 0;
     va_list args;
+
+    if (get_rflags() & 0x200UL)
+        spin_lock(&Pos.printk_lock);
     va_start(args, fmt);
     i = vsprintf(buf, fmt, args);
     va_end(args);
 
-    for (count = 0; count < i || line; ++count){
+    for (count = 0; count < i || line; count++){
         if (line > 0) {
-            --count;
+            count--;
             goto Label_tab;
         }
 
         if ((unsigned char) *(buf + count) == '\n') {
-            ++Pos.YPosition;
+            Pos.YPosition++;
             Pos.XPosition = 0;
         } else if ((unsigned char) *(buf + count) == '\b') {
-            --Pos.XPosition;
+            Pos.XPosition--;
             if (Pos.XPosition) {
                 Pos.XPosition = Pos.XResolution / Pos.XCharSize - 1;
-                --Pos.YPosition;
+                Pos.YPosition--;
                 if (Pos.YPosition < 0) {
                     Pos.YPosition = Pos.YResolution / Pos.YCharSize - 1;
                 }
@@ -70,22 +73,24 @@ int color_printk(unsigned int FRcolor, unsigned int BKcolor, const char *fmt,...
             line = ((Pos.XPosition + 8) & ~(8 - 1)) - Pos.XPosition; // 製表符佔去8個顯示字符，Pos.XPosition + 8跳到下一個製表位，並用 &~(8-1)使數字與8的倍數對齊
 
 Label_tab:
-            --line;
+            line--;
             putchar(Pos.FB_addr, Pos.XResolution ,Pos.XPosition * Pos.XCharSize, Pos.YPosition * Pos.YCharSize, FRcolor, BKcolor, ' ');	
-            ++Pos.XPosition;        
+            Pos.XPosition++;        
         } else {
             putchar(Pos.FB_addr, Pos.XResolution, Pos.XPosition * Pos.XCharSize, Pos.YPosition * Pos.YCharSize, FRcolor, BKcolor, (unsigned char) *(buf + count));
-            ++Pos.XPosition;            
+            Pos.XPosition++;            
         }
 
         if (Pos.XPosition >= (Pos.XResolution / Pos.XCharSize)) {
-            ++Pos.YPosition;
+            Pos.YPosition++;
             Pos.XPosition = 0;
         }
         if (Pos.YPosition >= (Pos.YResolution / Pos.YCharSize)) {
             Pos.YPosition = 0;
         }
     }
+    if (get_rflags() & 0x200UL)
+        spin_unlock(&Pos.printk_lock);
     return i;
 }
 
@@ -98,7 +103,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
     int len, i;
     int qualifier;		/* 'h', 'l', 'L' or 'Z' for integer fields */
 
-    for (str = buf; *fmt; ++fmt) {
+    for (str = buf; *fmt; fmt++) {
         /* *fmt == '\0'為截止條件 */
         if (*fmt != '%') {
             *str++ = *fmt; // 如果不是%則視為可顯示字符值皆填入buf中。
@@ -107,7 +112,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
 
         flags = 0;
         repeat:
-            ++fmt;
+            fmt++;
             switch (*fmt) {
                 case '-':
                     flags |= LEFT;	
@@ -132,7 +137,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
             if (is_digit(*fmt)) { /* 如果是數字 */
                 field_width = skip_atoi(&fmt);
             } else if (*fmt == '*') { 
-                ++fmt;
+                fmt++;
                 field_width = va_arg(args, int); // 字符*表示讓數據區的寬度由可變參數提供
                 if(field_width < 0) {
                     field_width = -field_width;
@@ -144,11 +149,11 @@ int vsprintf(char * buf,const char *fmt, va_list args)
 
             precision = -1;
             if (*fmt == '.') {
-                ++fmt;
+                fmt++;
                 if (is_digit(*fmt)) {
                     precision = skip_atoi(&fmt);
                 } else if (*fmt == '*') {	
-                    ++fmt;
+                    fmt++;
                     precision = va_arg(args, int);
                 }
                 if (precision < 0)
@@ -158,7 +163,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
             qualifier = -1;
             if (*fmt == 'h' || *fmt == 'l' || *fmt == 'L' || *fmt == 'Z') {	
                 qualifier = *fmt;
-                ++fmt;
+                fmt++;
             }
                             
             switch(*fmt) {
@@ -184,7 +189,7 @@ int vsprintf(char * buf,const char *fmt, va_list args)
                     if (!(flags & LEFT))
                         while (len < --field_width)
                             *str++ = ' ';
-                    for (i = 0; i < len; ++i)
+                    for (i = 0; i < len; i++)
                         *str++ = *s++;
                     while (len < --field_width)
                         *str++ = ' ';
@@ -264,18 +269,18 @@ void putchar(unsigned int *fb, int Xsize, int x, int y, unsigned int FRcolor, un
     int testval = 0;
     fontp = font_ascii[font];
 
-    for (i = 0; i < 16; ++i) {
+    for (i = 0; i < 16; i++) {
         addr = fb + Xsize *(y + i) + x;
         testval = 0x100;
-        for (j = 0; j < 8; ++j) {
+        for (j = 0; j < 8; j++) {
             testval >>= 1;
             if(*fontp & testval)
                 *addr = FRcolor;
             else
                 *addr = BKcolor;
-            ++addr;
+            addr++;
         }
-        ++fontp;
+        fontp++;
     }
 }
 

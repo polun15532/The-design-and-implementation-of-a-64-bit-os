@@ -1,10 +1,10 @@
 #!/bin/bash
-echo password | sudo -S sh
+#echo password | sudo -S sh
 cd bootloader
 make
 sudo dd if=boot.bin of=../boot.img bs=512 count=1 conv=notrunc
 cd ../kernel
-makegit 
+make
 cd ..
 
 sudo mount boot.img /media/ -t vfat -o loop

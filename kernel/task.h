@@ -14,7 +14,6 @@
 ***************************************************/
 
 #ifndef __TASK_H__
-
 #define __TASK_H__
 
 #include "memory.h"
@@ -29,8 +28,8 @@
 #define	USER_CS		(0x28)
 #define USER_DS		(0x30)
 
-#define CLONE_FS	(1 << 0)
-#define CLONE_FILES	(1 << 1)
+#define CLONE_FS	    (1 << 0)
+#define CLONE_FILES	    (1 << 1)
 #define CLONE_SIGNAL	(1 << 2)
 
 // stack size 32K
@@ -50,11 +49,11 @@ extern unsigned long _stack_start;
 
 extern void ret_from_intr();
 
-#define TASK_RUNNING		(1 << 0)
-#define TASK_INTERRUPTIBLE	(1 << 1)
+#define TASK_RUNNING		    (1 << 0)
+#define TASK_INTERRUPTIBLE	    (1 << 1)
 #define	TASK_UNINTERRUPTIBLE	(1 << 2)
-#define	TASK_ZOMBIE		(1 << 3)	
-#define	TASK_STOPPED		(1 << 4)
+#define	TASK_ZOMBIE		        (1 << 3)	
+#define	TASK_STOPPED		    (1 << 4)
 
 struct mm_struct {
     pml4t_t *pgd;   //一級頁表地址，切換任務時載入cr3時使用。
@@ -80,23 +79,26 @@ struct thread_struct {
     unsigned long error_code; // 異常的錯誤碼
 };
 
-#define PF_KTHREAD	(1 << 0)
-
 struct task_struct {
-    struct List list;
+
     volatile long state;
     unsigned long flags;
+    long signal;
 
     struct mm_struct *mm;
     struct thread_struct *thread;
+    struct List list;
 
     unsigned long addr_limit;   /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/
                                 /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
     long pid;
-    long counter;
-    long signal;
     long priority;
+    long vrun_time;
 };
+
+// struct task_struct->flags:
+#define PF_KTHREAD      (1UL << 0)
+#define NEED_SCHEDULE   (1UL << 1)
 
 union task_union {
     struct task_struct task;
@@ -110,17 +112,17 @@ struct thread_struct init_thread;
 {                                       \
     .state = TASK_UNINTERRUPTIBLE,      \
     .flags = PF_KTHREAD,                \
+    .signal = 0,                        \
     .mm = &init_mm,	                    \
     .thread = &init_thread,             \
     .addr_limit = 0xffff800000000000,   \
     .pid = 0,                           \
-    .counter = 1,                       \
-    .signal = 0,                        \
-    .priority = 0                       \
+    .priority = 2,                      \
+    .vrun_time = 0                      \
 }
 // 用於初始化 struct task_struct
 
-union task_union init_task_union __attribute__((__section__ (".data.init_task"))) = {INIT_TASK(init_task_union.task)};
+union task_union init_task_union __attribute__((__section__ (".data.init_task"), used)) = {INIT_TASK(init_task_union.task)};
 
 struct task_struct *init_task[NR_CPUS] = {&init_task_union.task,0};
 
@@ -179,7 +181,7 @@ extern struct task_struct *get_current();
 inline struct task_struct *get_current()
 {
     struct task_struct * current = NULL;
-    __asm__ __volatile__ ("andq %%rsp,%0    \n\t":"=r"(current):"0"(~32767UL));
+    __asm__ __volatile__ ("andq %%rsp, %0    \n\t":"=r"(current):"0"(~32767UL));
     return current;
 }
 
@@ -233,4 +235,5 @@ system_call_t system_call_table[MAX_SYSTEM_CALL_NR] = {
     [1] = sys_printf,
     [2 ... MAX_SYSTEM_CALL_NR - 1] = no_system_call
 };
+
 #endif

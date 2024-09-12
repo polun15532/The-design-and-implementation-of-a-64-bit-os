@@ -19,11 +19,12 @@ typedef struct {
     unsigned long parameter;
     void (*handler)(unsigned long nr, unsigned long parameter, struct pt_regs *regs);
     unsigned long flags;  
-} irq_desc_T;
+} irq_desc_t;
 
 #define NR_IRQS 24
 
-irq_desc_T interrupt_desc[NR_IRQS] = {0};
+irq_desc_t interrupt_desc[NR_IRQS] = {0};
+irq_desc_t SMP_IPI_desc[10] = {0};
 
 int register_irq(unsigned long irq,
                  void *arg,
@@ -33,6 +34,8 @@ int register_irq(unsigned long irq,
                  char *irq_name);
 
 int unregister_irq(unsigned long irq);
+
 extern void (*interrupt[24])(void);
+extern void (*SMP_interrupt[10])(void);
 void do_IRQ(struct pt_regs *regs, unsigned long nr);
 #endif

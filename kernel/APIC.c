@@ -54,6 +54,15 @@ void IOAPIC_edge_ack(unsigned long irq)
                           :::"memory");
 }
 
+void Local_APIC_edge_level_ack(unsigned long irq)
+{
+    __asm__ __volatile__( "movq $0x00,  %%rdx  \n\t"
+                          "movq $0x00,  %%rax  \n\t"
+                          "movq $0x80b, %%rcx  \n\t"
+                          "wrmsr               \n\t"
+                          :::"memory");
+}
+
 
 
 unsigned long ioapic_rte_read(unsigned char index)
@@ -268,8 +277,8 @@ void APIC_IOAPIC_init()
     IOAPIC_pagetable_remap();
 
     for (i = 32; i < 56; i++) {
-        set_intr_gate(i, 2, interrupt[i - 32]);
-        // 前32個向量號是系統中斷不能用，這裡的2是指ist2(TSS描述符指定)。
+        set_intr_gate(i, 0, interrupt[i - 32]);
+        // 前32個向量號是系統中斷不能用，這裡的0是指不切換stack。
     }
 
     color_printk(GREEN, BLACK, "MASK 8259A\n");
@@ -287,6 +296,7 @@ void APIC_IOAPIC_init()
     IOAPIC_init();
 
     //get RCBA address
+
     io_out32(0xcf8, 0x8000f8f0);
     x = io_in32(0xcfc);
     color_printk(RED,BLACK,"Get RCBA Address:%#010x\n", x);	
@@ -304,18 +314,30 @@ void APIC_IOAPIC_init()
     *p = x;
     io_mfence();
 
-    memset(interrupt_desc, 0, sizeof(irq_desc_T)*NR_IRQS);
+    memset(interrupt_desc, 0, sizeof(irq_desc_t) * NR_IRQS);
 
-    sti(); 
+    // sti(); 
 }
 
 void do_IRQ(struct pt_regs *regs, unsigned long nr)
 {
-    irq_desc_T *irq = &interrupt_desc[nr - 32];
+    switch (nr & 0x80) {
+        case 0x00:
+            irq_desc_t *irq = &interrupt_desc[nr - 32];
 
-    if(irq->handler)
-        irq->handler(nr, irq->parameter, regs);
+            if(irq->handler)
+                irq->handler(nr, irq->parameter, regs);
+            if(irq->controller && irq->controller->ack)
+                irq->controller->ack(nr);
+        break;
 
-    if(irq->controller && irq->controller->ack)
-        irq->controller->ack(nr);
+        case 0x80:
+            color_printk(RED, BLACK, "SMP IPI :%d\n", nr);
+            Local_APIC_edge_level_ack(nr);
+            break;
+        
+        default:
+             color_printk(RED, BLACK, "do_IRQ receive:%d\n", nr);
+            break;
+    }
 }

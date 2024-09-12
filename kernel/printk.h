@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include "font.h"
 #include "linkage.h"
+#include "spinlock.h"
 
 // 這裡的聚集將對應變數flags，數字表示位域
 #define ZEROPAD	1   // bit0用數字的前導0取代空格
@@ -35,7 +36,7 @@ __res; })
 extern unsigned char font_ascii[256][16];
 char buf[4096] = {0};
 
-struct {
+struct position {
     int XResolution; //螢幕分辨率
     int YResolution;
 
@@ -47,6 +48,8 @@ struct {
 
     unsigned int *FB_addr; // frame buffer address
     unsigned long FB_length;
+
+    spinlock_t printk_lock;
 } Pos;
 
 void frame_buffer_init();

@@ -48,11 +48,11 @@ void init_memory()
     unsigned long TotalMem = 0 ;
     struct E820 *p = NULL;	
     
-    color_printk(RED,BLACK,"Display Physics Address MAP,Type(1:RAM,2:ROM or Reserved,3:ACPI Reclaim Memory,4:ACPI NVS Memory,Others:Undefine)\n");
+    // color_printk(RED,BLACK,"Display Physics Address MAP,Type(1:RAM,2:ROM or Reserved,3:ACPI Reclaim Memory,4:ACPI NVS Memory,Others:Undefine)\n");
     p = (struct E820 *)0xffff800000007e00;
 
     for (i = 0; i < 32; i++) {
-        color_printk(ORANGE,BLACK, "Address:%#018lx\tLength:%#018lx\tType:%#010x\n", p->address, p->length, p->type);
+        // color_printk(ORANGE,BLACK, "Address:%#018lx\tLength:%#018lx\tType:%#010x\n", p->address, p->length, p->type);
         unsigned long tmp = 0;
         if(p->type == 1)
             TotalMem +=  p->length;
@@ -67,7 +67,7 @@ void init_memory()
             break;
     }
 
-    color_printk(ORANGE, BLACK, "OS Can Used Total RAM:%#018lx\n", TotalMem);
+    // color_printk(ORANGE, BLACK, "OS Can Used Total RAM:%#018lx\n", TotalMem);
 
     TotalMem = 0; // 考慮頁表對齊重新計算記憶體資源。
 
@@ -82,7 +82,7 @@ void init_memory()
         TotalMem += (end - start) >> PAGE_2M_SHIFT;
     }
 
-    color_printk(ORANGE, BLACK, "OS Can Used Total 2M PAGEs:%#010x=%010d\n", TotalMem, TotalMem);
+    // color_printk(ORANGE, BLACK, "OS Can Used Total 2M PAGEs:%#010x=%010d\n", TotalMem, TotalMem);
     TotalMem = memory_management_struct.e820[memory_management_struct.e820_length].address
                + memory_management_struct.e820[memory_management_struct.e820_length].length; // 這是總地址空間，包括RAM、ROM、內存空洞等。
            
@@ -167,31 +167,32 @@ void init_memory()
     memory_management_struct.pages_struct->age = 0;
 
     memory_management_struct.zones_length = (memory_management_struct.zones_size * sizeof(struct Zone) + sizeof(long) - 1) & ( ~ (sizeof(long) - 1));
+    /*
     color_printk(ORANGE, BLACK, "bits_map:%#018lx,bits_size:%#018lx,bits_length:%#018lx\n",
                  memory_management_struct.bits_map, memory_management_struct.bits_size, memory_management_struct.bits_length);
     color_printk(ORANGE, BLACK, "pages_struct:%#018lx,pages_size:%#018lx,pages_length:%#018lx\n",
                  memory_management_struct.pages_struct, memory_management_struct.pages_size, memory_management_struct.pages_length);
     color_printk(ORANGE, BLACK, "zone_struct:%#018lx,zones_size:%#018lx,zones_length:%#018lx\n",
                  memory_management_struct.zones_struct, memory_management_struct.zones_size, memory_management_struct.zones_length);
-
+    */
     ZONE_DMA_INDEX = 0;
     ZONE_NORMAL_INDEX = 0;
     ZONE_UNMAPED_INDEX = 0;
 
     for (i = 0; i < memory_management_struct.zones_size; i++) {
         struct Zone *z = memory_management_struct.zones_struct + i;
-        color_printk(ORANGE, BLACK, "zone_start_address:%#018lx,zone_end_address:%#018lx,zone_length:%#018lx,pages_group:%#018lx,pages_length:%#018lx\n",
-                    z->zone_start_address, z->zone_end_address, z->zone_length, z->pages_group, z->pages_length);
+        // color_printk(ORANGE, BLACK, "zone_start_address:%#018lx,zone_end_address:%#018lx,zone_length:%#018lx,pages_group:%#018lx,pages_length:%#018lx\n",
+        //            z->zone_start_address, z->zone_end_address, z->zone_length, z->pages_group, z->pages_length);
         if(z->zone_start_address >= 0x100000000 && !ZONE_UNMAPED_INDEX)
             ZONE_UNMAPED_INDEX = i;
     }
 
-    color_printk(ORANGE, BLACK, "ZONE_DMA_INDEX:%d\tZONE_NORMAL_INDEX:%d\tZONE_UNMAPED_INDEX:%d\n", ZONE_DMA_INDEX,ZONE_NORMAL_INDEX, ZONE_UNMAPED_INDEX);
+    // color_printk(ORANGE, BLACK, "ZONE_DMA_INDEX:%d\tZONE_NORMAL_INDEX:%d\tZONE_UNMAPED_INDEX:%d\n", ZONE_DMA_INDEX,ZONE_NORMAL_INDEX, ZONE_UNMAPED_INDEX);
     memory_management_struct.end_of_struct = (unsigned long) ((unsigned long) memory_management_struct.zones_struct 
                                              + memory_management_struct.zones_length + sizeof(long) * 32) & (~(sizeof(long) - 1));
 
-    color_printk(ORANGE,BLACK, "start_code:%#018lx,end_code:%#018lx,end_data:%#018lx,end_brk:%#018lx,end_of_struct:%#018lx\n",
-                 memory_management_struct.start_code, memory_management_struct.end_code, memory_management_struct.end_data, memory_management_struct.end_brk, memory_management_struct.end_of_struct);
+    // color_printk(ORANGE,BLACK, "start_code:%#018lx,end_code:%#018lx,end_data:%#018lx,end_brk:%#018lx,end_of_struct:%#018lx\n",
+    //             memory_management_struct.start_code, memory_management_struct.end_code, memory_management_struct.end_data, memory_management_struct.end_brk, memory_management_struct.end_of_struct);
 
     i = Virt_To_Phy(memory_management_struct.end_of_struct) >> PAGE_2M_SHIFT; /* 這理用於計算從地址0到內存管理結構結尾佔據多少頁 */
 
@@ -205,15 +206,18 @@ void init_memory()
 
 
     Global_CR3 = Get_gdt();
+
+    /*
     color_printk(INDIGO, BLACK, "Global_CR3\t:%#018lx\n", Global_CR3);
     color_printk(INDIGO, BLACK, "*Global_CR3\t:%#018lx\n", *Phy_To_Virt(Global_CR3) & (~0xff));
     color_printk(PURPLE, BLACK, "**Global_CR3\t:%#018lx\n", *Phy_To_Virt(*Phy_To_Virt(Global_CR3) & (~0xff)) & (~0xff));
     color_printk(ORANGE, BLACK, "1.memory_management_struct.bits_map:%#018lx\tzone_struct->page_using_count:%d\tzone_struct->page_free_count:%d\n"
                 , *memory_management_struct.bits_map, memory_management_struct.zones_struct->page_using_count
                 , memory_management_struct.zones_struct->page_free_count);
- 
-   for(i = 0; i < 10; i++) 
-       *(Phy_To_Virt(Global_CR3) + i) = 0UL;
+    */
+
+    // for(i = 0; i < 10; i++) 
+       // *(Phy_To_Virt(Global_CR3) + i) = 0UL;
 
     flush_tlb();
 }
@@ -830,12 +834,13 @@ unsigned long slab_init()
         kmalloc_cache_size[i].cache_pool->page = page;
         kmalloc_cache_size[i].cache_pool->Vaddress = virtual;
     }
-
+    /*
     color_printk(ORANGE, BLACK,"3.memory_management_struct.bits_map:%#018lx\tzone_struct->page_using_count:%d\tzone_struct->page_free_count:%d\n",
                  *memory_management_struct.bits_map, memory_management_struct.zones_struct->page_using_count, memory_management_struct.zones_struct->page_free_count);
     color_printk(ORANGE, BLACK,"start_code:%#018lx,end_code:%#018lx,end_data:%#018lx,end_brk:%#018lx,end_of_struct:%#018lx\n"
                 , memory_management_struct.start_code, memory_management_struct.end_code, memory_management_struct.end_data
                 , memory_management_struct.end_brk, memory_management_struct.end_of_struct);
+    */
     return 1;
 }
 
@@ -848,13 +853,13 @@ void pagetable_init()
 
     tmp = (unsigned long*)((unsigned long)Phy_To_Virt(base_addr) + 8 * 256);
     // Global_CR3 & (~0xfffUL)用於將CR3暫存器的低12位標誌位屏蔽以取得一級頁表的基地址，8 * 256代表將tmp定位到第256項。
-    color_printk(YELLOW, BLACK, "1:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
+    // color_printk(YELLOW, BLACK, "1:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
 
     tmp = Phy_To_Virt(*tmp & (~0xfffUL)); // 目前設定的三級頁表可用Phy_To_Virt映射，此操作用於找出下一級頁表的虛擬地址。
-    color_printk(YELLOW, BLACK, "2:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
+    // color_printk(YELLOW, BLACK, "2:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
 
     tmp = Phy_To_Virt(*tmp & (~0xfffUL));
-    color_printk(YELLOW, BLACK, "3:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
+    // color_printk(YELLOW, BLACK, "3:%#018lx,%#018lx\t\t\n", (unsigned long)tmp, *tmp);
 
     for (i = 0; i < memory_management_struct.zones_size; i++) {
         struct Zone *z = memory_management_struct.zones_struct + i;
@@ -886,7 +891,7 @@ void pagetable_init()
             tmp = (unsigned long*)((unsigned long)Phy_To_Virt(*tmp & (~ 0xfffUL)) + (((unsigned long)Phy_To_Virt(p->PHY_address) >> PAGE_2M_SHIFT) & 0x1ff) * 8);
             // 將tmp轉換到3級頁表的目標項次(x86-64支援2MB的大頁目前的系統頁分配會以2MB為單位)。
             set_pdt(tmp, mk_pdt(p->PHY_address,PAGE_KERNEL_Page));
-            //if(j % 50 == 0)
+            // if(j % 50 == 0)
             //    color_printk(GREEN, BLACK, "@:%#018lx,%#018lx\t\n", (unsigned long)tmp, *tmp);
         }
     }

@@ -29,7 +29,10 @@
 #define sti()       __asm__ __volatile__ ("sti    \n\t":::"memory")
 #define cli()       __asm__ __volatile__ ("cli    \n\t":::"memory")
 #define nop()       __asm__ __volatile__ ("nop    \n\t")
-#define io_mfence() __asm__ __volatile__ ("mfence   \n\t":::"memory")
+#define io_mfence() __asm__ __volatile__ ("mfence \n\t":::"memory")
+
+#define hlt()       __asm__ __volatile__ ("hlt    \n\t")
+#define pause()     __asm__ __volatile__ ("pause  \n\t")
 
 
 struct List {
@@ -370,16 +373,16 @@ static inline void io_out32(unsigned short port, unsigned int value)
 }
 
 #define port_insw(port, buffer, nr)    \
-__asm__ __volatile__("cld;rep;insw;mfence;"::"d"(port),"D"(buffer),"c"(nr):"memory")
+__asm__ __volatile__( "cld;rep;insw;mfence;"::"d"(port),"D"(buffer),"c"(nr):"memory")
 
 #define port_outsw(port, buffer, nr)    \
-__asm__ __volatile__("cld;rep;outsw;mfence;"::"d"(port),"S"(buffer),"c"(nr):"memory")
+__asm__ __volatile__( "cld;rep;outsw;mfence;"::"d"(port),"S"(buffer),"c"(nr):"memory")
 
 static inline unsigned long rdmsr(unsigned long address)
 {
     unsigned int tmp0 = 0;
     unsigned int tmp1 = 0;
-    __asm__ __volatile__("rdmsr	\n\t":"=d"(tmp0),"=a"(tmp1):"c"(address):"memory");	
+    __asm__ __volatile__( "rdmsr	\n\t":"=d"(tmp0),"=a"(tmp1):"c"(address):"memory");	
     return (unsigned long)tmp0<<32 | tmp1;
 }
 
@@ -388,5 +391,20 @@ static inline void wrmsr(unsigned long address, unsigned long value)
     __asm__ __volatile__("wrmsr	\n\t"::"d"(value >> 32),"a"(value & 0xffffffff),"c"(address):"memory");	
 }
 
+static inline unsigned long get_rsp()
+{
+    unsigned long tmp = 0;
+    __asm__ __volatile__ ("movq %%rsp, %0 \n\t":"=r"(tmp)::"memory");
+    return tmp;
+}
 
+static inline unsigned long get_rflags()
+{
+    unsigned long tmp = 0;
+    __asm__ __volatile__ ("pushfq           \n\t"
+                          "movq %%rsp, %0   \n\t"
+                          "popfq            \n\t"
+                          :"=r"(tmp)::"memory");
+    return tmp;
+}
 #endif

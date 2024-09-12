@@ -1,29 +1,35 @@
 #include "linkage.h"
 
-R15 =   0x00
-R14 =   0x08
-R13 =   0x10
-R12 =   0x18
-R11 =   0x20
-R10 =   0x28
-R9  =   0x30
-R8  =   0x38
-RBX =   0x40
-RCX =   0x48
-RDX =   0x50
-RSI =   0x58
-RDI =   0x60
-RBP =   0x68
-DS  =   0x70
-ES  =   0x78
-RAX =   0x80
+R15     =   0x00
+R14     =   0x08
+R13     =   0x10
+R12     =   0x18
+R11     =   0x20
+R10     =   0x28
+R9      =   0x30
+R8      =   0x38
+RBX     =   0x40
+RCX     =   0x48
+RDX     =   0x50
+RSI     =   0x58
+RDI     =   0x60
+RBP     =   0x68
+DS      =   0x70
+ES      =   0x78
+RAX     =   0x80
 FUNC    =   0x88
 ERRCODE =   0x90
-RIP =   0x98
-CS  =   0xa0
+RIP     =   0x98
+CS      =   0xa0
 RFLAGS  =   0xa8
 OLDRSP  =   0xb0
 OLDSS   =   0xb8
+
+// struct task_struct member offset
+TSK_STATE   =   0x00
+TSK_FLAGS   =   0x08
+TSK_SIGNAL  =   0x10
+
 
 RESTORE_ALL:
     popq    %r15;
@@ -48,14 +54,34 @@ RESTORE_ALL:
     addq    $0x10,  %rsp;
     iretq;
 
+// 定位到struct task_struct
 #define GET_CURRENT(reg)    \
-    movq    $-32768,reg;    \
-    andq    %rsp,   reg
+    movq    $-32768, reg;   \
+    andq    %rsp, reg
 
 ret_from_exception:
     /*GET_CURRENT(%ebx)	need rewrite*/
 ENTRY(ret_from_intr)
-    jmp	RESTORE_ALL	/*need rewrite*/
+    movq    $-1,    %rcx
+    testq   softirq_status(%rip),   %rcx
+    jnz     softirq_handler
+    GET_CURRENT(%rbx)
+    movq    TSK_FLAGS(%rbx),    %rcx
+    testq   $2,     %rcx
+    jnz     reschedule
+    jmp     RESTORE_ALL
+
+softirq_handler:
+    callq   do_softirq
+    GET_CURRENT(%rbx)
+    movq    TSK_FLAGS(%rbx),    %rcx
+    testq   $2,     %rcx
+    jnz     reschedule    
+    jmp     RESTORE_ALL
+
+reschedule:
+    callq   schedule
+    jmp     RESTORE_ALL
 
 ENTRY(system_call)
     sti;

@@ -23,7 +23,7 @@ ENTRY(_start)
     mov	%ax,    %es
     mov	%ax,    %fs
     mov	%ax,    %ss
-    mov	$0x7E00,    %esp
+    movq	_stack_start(%rip),	%rsp
 
 //=======   load GDTR
 
@@ -40,7 +40,7 @@ ENTRY(_start)
     mov	%ax,    %gs
     mov	%ax,%ss
 
-    movq    $0x7E00,    %rsp
+    movq	_stack_start(%rip),	%rsp
 
 //=======   load    cr3
 
@@ -62,7 +62,12 @@ entry64:
     movq    %rax,   %es
     movq    %rax,   %gs
     movq    %rax,   %ss
-    movq	_stack_start(%rip), %rsp /* rsp address */
+    movq	_stack_start(%rip), %rsp // rsp address
+
+    movq    $0x1b,  %rcx
+    rdmsr
+    bt      $8,    %rax
+    jnc     start_smp       // 如果是AP就跳轉到start_smp執行
 
 setup_IDT:
     leaq    ignore_int(%rip),   %rdx
@@ -108,11 +113,20 @@ setup_TSS64:
     movq    go_to_kernel(%rip), %rax        /* movq address */
     pushq   $0x08
     pushq   %rax
+
     lretq
 
 go_to_kernel:
     .quad   Start_Kernel
 
+start_smp:
+    movq    go_to_SMP_kernel(%rip), %rax     /* movq address */
+    pushq   $0x08   // lretq的段選擇子
+    pushq   %rax    // lretq的跳轉地址
+    lretq
+
+go_to_SMP_kernel:
+    .quad   Start_SMP
 
 //=======   ignore_int
 
@@ -262,7 +276,7 @@ GDT_Table:
     .quad   0x0000f20000000000          /*6	USER    Data    64-bit  Segment	30*/
     .quad   0x00cf9a000000ffff          /*7	KERNEL  Code    32-bit  Segment	38*/
     .quad   0x00cf92000000ffff          /*8	KERNEL  Data    32-bit  Segment	40*/
-    .fill   10,8,0                      /*10 ~ 11 TSS (jmp one segment <9>) in long-mode 128-bit 50*/
+    .fill   100, 8, 0                   /*10 ~ 11 TSS (jmp one segment <9>) in long-mode 128-bit 50*/
 GDT_END:
 
 GDT_POINTER:
@@ -288,8 +302,3 @@ IDT_BASE:   .quad   IDT_Table
 TSS64_Table:
     .fill    13,8,0
 TSS64_END:
-
-
-TSS64_POINTER:
-TSS64_LIMIT:    .word   TSS64_END - TSS64_Table - 1
-TSS64_BASE:     .quad   TSS64_Table

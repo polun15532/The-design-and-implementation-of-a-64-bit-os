@@ -1,6 +1,9 @@
 #include "task.h"
+#include "ptrace.h"
 #include "printk.h"
 #include "linkage.h"
+#include "schedule.h"
+
 
 extern void ret_system_call(void);
 extern void system_call(void);
@@ -18,18 +21,46 @@ void user_level_function()
                     "sysenter                   \n\t"
                     "sysexit_return_address:    \n\t"
                     :"=a"(ret):"0"(1),"D"(string):"memory");
-    while(1);
+    while (1);
 }
 
 unsigned long do_execve(struct pt_regs *regs)
 {
+    unsigned long addr = 0x800000;
+    unsigned long *tmp;
+    unsigned long *virtual = NULL;
+    struct Page *p = NULL;
+
     regs->rdx = 0x800000; //RIP
     regs->rcx = 0xa00000; //RSP
     regs->rax = 1;
     regs->ds = 0;
     regs->es = 0;
-    color_printk(RED,BLACK,"do_execve task is running\n");
-    memcpy(user_level_function,(void *)0x800000,1024); // 定義與string.h的函式有區別，為memcpy(src,dst,size);
+    color_printk(RED, BLACK, "do_execve task is running\n");
+
+    // 下面的操作為註冊新的頁表。
+    tmp = (unsigned long*)(((unsigned long)Get_gdt()) & ~0xfffUL);
+
+    tmp = Phy_To_Virt(tmp + ((addr >> PAGE_GDT_SHIFT) & 0x1ff)); // 查找二級頁表
+    virtual = kmalloc(PAGE_4K_SIZE, 0); // 註冊4KB的新頁
+    set_mpl4t(tmp, mk_mpl4t(Virt_To_Phy(virtual), PAGE_USER_GDT));
+
+    tmp = Phy_To_Virt((unsigned long *)(*tmp & ~0xfffUL) + ((addr >> PAGE_1G_SHIFT) & 0x1ff));
+    virtual = kmalloc(PAGE_4K_SIZE, 0);
+    set_pdpt(tmp, mk_pdpt(Virt_To_Phy(virtual), PAGE_USER_Dir));
+
+    tmp = Phy_To_Virt((unsigned long*)(*tmp & ~0xfffUL) + ((addr >> PAGE_2M_SHIFT) & 0x1ff));
+    p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped);
+    set_pdt(tmp, mk_pdt(p->PHY_address, PAGE_USER_Page));
+
+    flush_tlb(); // 刷新快取
+
+    if(!(current->flags & PF_KTHREAD))
+        current->addr_limit = 0xffff800000000000;
+    
+    // 將函數複製到0x8000000處等待被執行。
+    color_printk(ORANGE, WHITE, "do_memcpy to user_level_function\n");
+    memcpy(user_level_function, (void *)0x800000, 1024); // 定義與string.h的函式有區別，為memcpy(src,dst,size);
     return 0;
 }
 
@@ -40,6 +71,7 @@ unsigned long init(unsigned long arg)
     current->thread->rip = (unsigned long)ret_system_call;
     current->thread->rsp = (unsigned long)current + STACK_SIZE - sizeof(struct pt_regs);
     regs = (struct pt_regs*)current->thread->rsp;
+    current->flags = 0;
     __asm__ __volatile__ ( "movq    %1, %%rsp   \n\t"
                            "pushq   %2          \n\t"
                            "jmp     do_execve   \n\t"
@@ -53,22 +85,24 @@ unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned 
     struct thread_struct *thd = NULL;
     struct Page *p = NULL;
     
-    color_printk(WHITE,BLACK, "alloc_pages,bitmap:%#018lx\n", *memory_management_struct.bits_map);
+    color_printk(WHITE, BLACK, "alloc_pages,bitmap:%#018lx\n", *memory_management_struct.bits_map);
     p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped | PG_Kernel); // 申請一個頁，並設定頁的屬性。
-    color_printk(WHITE,BLACK,"alloc_pages,bitmap:%#018lx\n",*memory_management_struct.bits_map);
+    color_printk(WHITE, BLACK, "alloc_pages,bitmap:%#018lx\n", *memory_management_struct.bits_map);
 
     tsk = (struct task_struct *)Phy_To_Virt(p->PHY_address);
-    color_printk(WHITE,BLACK,"struct task_struct address:%#018lx\n",(unsigned long)tsk);
+    color_printk(WHITE, BLACK, "struct task_struct address:%#018lx\n", (unsigned long)tsk);
 
     memset(tsk, 0, sizeof(*tsk));
     *tsk = *current; // 把當前行程的task_struct賦值給*tsk。另外current是巨集替換成函式get_current()。
 
     list_init(&tsk->list);
-    list_add_to_before(&init_task_union.task.list,&tsk->list); // 把目前的任務放到&tsk->list前面。
+
+    tsk->priority = 2;
     tsk->pid++;
     tsk->state = TASK_UNINTERRUPTIBLE;
 
     thd = (struct thread_struct*)(tsk + 1); // 把thread_struct放置到task_struct後面
+    memset(thd, 0, sizeof(*thd));
     tsk->thread = thd;	
 
     memcpy(regs, (void*)((unsigned long)tsk + STACK_SIZE - sizeof(struct pt_regs)), sizeof(struct pt_regs));
@@ -86,9 +120,9 @@ unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned 
         thd->rip = regs->rip = (unsigned long)ret_system_call;
 
     // PF_KTHREAD用來判斷這一個行程是核心層的還是應用層的。如果是應用層就把程式入口設定在ret_from_intr。
-    // 感覺像是我們撰寫main函式的程式入口 _start?
     tsk->state = TASK_RUNNING;
-
+    color_printk(WHITE, BLACK, "#current addr: %lx, tsk addr : %lx\n", &init_task_union.task, tsk);
+    insert_task_queue(tsk);
     return 1;
 }
 
@@ -146,30 +180,33 @@ int kernel_thread(unsigned long (*fn)(unsigned long), unsigned long arg, unsigne
     regs.ss = KERNEL_DS;
     regs.rflags = (1 << 9); // 第9位是IF標幟位表示CPU可以響應中斷。
     regs.rip = (unsigned long)kernel_thread_func; // 這是引導程式
-    return do_fork(&regs,flags,0,0);
+    return do_fork(&regs, flags, 0, 0);
 }
 
 void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
     // linux2.4後process會共用同一個TSS，準確來說是1個CPU具有1個TSS，這些TSS由全局變數init_tss數組管理。
     init_tss[0].rsp0 = next->thread->rsp0;
-    set_tss64(init_tss[0].rsp0, init_tss[0].rsp1, init_tss[0].rsp2, init_tss[0].ist1, init_tss[0].ist2, init_tss[0].ist3, init_tss[0].ist4, init_tss[0].ist5, init_tss[0].ist6, init_tss[0].ist7);
+    set_tss64(TSS64_Table, init_tss[0].rsp0, init_tss[0].rsp1, init_tss[0].rsp2,
+              init_tss[0].ist1, init_tss[0].ist2, init_tss[0].ist3, init_tss[0].ist4,
+              init_tss[0].ist5, init_tss[0].ist6, init_tss[0].ist7);
     // set_tss64就是把init_tss存放到tr暫存器指向的TSS64_Table中。
     __asm__ __volatile__("movq  %%fs,   %0 \n\t":"=a"(prev->thread->fs));
     __asm__ __volatile__("movq  %%gs,   %0 \n\t":"=a"(prev->thread->gs));
 
     __asm__ __volatile__("movq  %0, %%fs \n\t"::"a"(next->thread->fs));
     __asm__ __volatile__("movq  %0, %%gs \n\t"::"a"(next->thread->gs));
+    wrmsr(0x175, next->thread->rsp0);
 
-    color_printk(WHITE,BLACK,"prev->thread->rsp0:%#018lx\n",prev->thread->rsp0);
-    color_printk(WHITE,BLACK,"next->thread->rsp0:%#018lx\n",next->thread->rsp0);
+    color_printk(WHITE, BLACK, "prev->thread->rsp0:%#018lx\t", prev->thread->rsp0);
+    color_printk(WHITE, BLACK, "prev->thread->rsp :%#018lx\n", prev->thread->rsp);
+    color_printk(WHITE, BLACK, "next->thread->rsp0:%#018lx\t", next->thread->rsp0);
+    color_printk(WHITE, BLACK, "next->thread->rsp :%#018lx\n", next->thread->rsp);
 }
 
-
- void task_init()
+void task_init()
 {
-    struct task_struct *p = NULL;
-
+    struct task_struct *tmp = NULL;
     init_mm.pgd = (pml4t_t*)Global_CR3; // 最初的一級頁表
 
     init_mm.start_code = memory_management_struct.start_code; // 核心程式碼段的起始地址
@@ -186,21 +223,24 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 
     init_mm.start_stack = _stack_start; // 系統第一個行程的stack基地址
 
+    // 這裡寫入MSR地址是希望透過sysenter與sysexit實現系統調用，這比ret類指令跳快。
     wrmsr(0x174, KERNEL_CS); // KERNEL_CS = 0x8表示載入第一個GDT描述符。
     wrmsr(0x175, current->thread->rsp0); // 系統調用的rsp
     wrmsr(0x176, (unsigned long)system_call); // 系統調用的rip
 
     //	init_thread,init_tss
-    set_tss64(init_thread.rsp0, init_tss[0].rsp1, init_tss[0].rsp2, init_tss[0].ist1, init_tss[0].ist2, init_tss[0].ist3, init_tss[0].ist4, init_tss[0].ist5, init_tss[0].ist6, init_tss[0].ist7);
+    set_tss64(TSS64_Table, init_thread.rsp0, init_tss[0].rsp1, init_tss[0].rsp2,
+              init_tss[0].ist1, init_tss[0].ist2, init_tss[0].ist3, init_tss[0].ist4,
+              init_tss[0].ist5, init_tss[0].ist6, init_tss[0].ist7);
 
     init_tss[0].rsp0 = init_thread.rsp0;
     
-    list_init(&init_task_union.task.list);
-
+    list_init(&init_task_union.task.list); // 初始化任務佇列
+    init_task_union.task.vrun_time = 0x7fffffffffffff;
     kernel_thread(init, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL); // 建立init行程
 
     init_task_union.task.state = TASK_RUNNING; // 修改成運行狀態。
 
-    p = container_of(list_next(&current->list), struct task_struct,list); // 從成員list反推結構體的起始地址。
-    switch_to(current, p); // 切換到init行程。
+    // tmp = container_of(list_next(&current->list), struct task_struct,list); // 從成員list反推結構體的起始地址。
+    // switch_to(current, tmp); // 切換到init行程。
 }
