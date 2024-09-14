@@ -6,7 +6,7 @@ all: system
 	objcopy -I elf64-x86-64 -S -R ".eh_frame" -R ".comment" -O binary system kernel.bin
 
 system:	head.o entry.o APU_boot.o main.o printk.o trap.o memory.o interrupt.o \
- 		PIC.o task.o cpu.o keyboard.o mouse.o disk.o SMP.o time.o HPET.o timer.o \
+		PIC.o task.o cpu.o keyboard.o mouse.o disk.o SMP.o time.o HPET.o timer.o \
 		softirq.o schedule.o
 	ld -b elf64-x86-64 -z muldefs -o system head.o entry.o APU_boot.o main.o \
 	printk.o trap.o memory.o interrupt.o PIC.o task.o cpu.o keyboard.o mouse.o \
