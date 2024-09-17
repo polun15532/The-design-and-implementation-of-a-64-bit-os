@@ -25,14 +25,14 @@ static inline void atomic_sub(atomic_t *atomic, long value) {
 static inline void atomic_inc(atomic_t *atomic) {
     __asm__ __volatile__( "lock incq %0     \n\t"
                           : "=m" (atomic->value) 
-                          : "=m" (atomic->value)
+                          : "m" (atomic->value)
                           : "memory");
 }
 
 static inline void atomic_dec(atomic_t *atomic) {
     __asm__ __volatile__( "lock decq %0     \n\t"
                           : "=m" (atomic->value) 
-                          : "=m" (atomic->value)
+                          : "m" (atomic->value)
                           : "memory");
 }
 

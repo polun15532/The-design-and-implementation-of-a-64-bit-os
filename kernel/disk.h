@@ -2,6 +2,7 @@
 #define __DISK_H__
 
 #include "lib.h"
+#include "semaphore.h"
 #define PORT_DISK0_DATA          0x1f0
 #define PORT_DISK0_ERR_FEATURE   0x1f1
 #define PORT_DISK0_SECTOR_CNT    0x1f2
@@ -41,11 +42,11 @@ struct block_buffer_node {
     unsigned long LBA; // 48位元LBA地址
     unsigned char *buffer; // 對應內存位
     void(*end_handler)(unsigned long nr, unsigned long parameter); // 後續處理方法
-    struct List list;
+    wait_queue_t wait_queue;
 };
 
 struct request_queue {
-    struct List queue_list; // 請求佇列
+    wait_queue_t wait_queue_list; // 請求佇列
     struct block_buffer_node *in_using; // 處理中的請求
     long block_request_count; // 剩餘請求數量
 };

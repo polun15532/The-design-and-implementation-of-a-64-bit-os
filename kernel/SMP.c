@@ -112,12 +112,6 @@ void Start_SMP()
     spin_unlock(&SMP_lock);
     current->preempt_count = 0;  // 歸零
     sti();
-
-    if (SMP_cpu_id() == 3)
-        task_init();
-
-    
-
     while(1)
         hlt();
 }

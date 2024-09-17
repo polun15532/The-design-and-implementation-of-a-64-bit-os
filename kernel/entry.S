@@ -93,7 +93,6 @@ reschedule:
     jmp     RESTORE_ALL
 
 ENTRY(system_call)
-//    sti;
     subq    $0x38,  %rsp;
     cld;
     pushq   %rax;
@@ -120,6 +119,7 @@ ENTRY(system_call)
     movq    %rdx,	%ds;
     movq    %rdx,	%es;
     movq    %rsp,	%rdi
+    sti;
     callq   system_call_function
 
 ENTRY(ret_system_call)
@@ -144,7 +144,8 @@ ENTRY(ret_system_call)
     movq    %rax,   %es
     popq    %rax
     addq    $0x38,  %rsp
-    .byte   0x48 
+    sti
+    .byte   0x48 // 修飾前綴讓sysexit可執行64位操作數
     sysexit
 
 ENTRY(divide_error)

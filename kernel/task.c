@@ -7,6 +7,7 @@
 #include "schedule.h"
 #include "printk.h"
 #include "SMP.h"
+#include "disk.h"
 
 
 struct mm_struct init_mm = {0};
@@ -43,6 +44,8 @@ unsigned long no_system_call(struct pt_regs *regs)
 unsigned long sys_printf(struct pt_regs *regs)
 {
     color_printk(BLACK, WHITE, (char*)regs->rdi);
+    color_printk(RED, BLACK, "FAT32 init\n");
+    DISK1_FAT32_FS_init();
     return 1;    
 }
 

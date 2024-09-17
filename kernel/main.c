@@ -91,6 +91,9 @@ void Start_Kernel(void)
     color_printk(RED, BLACK, "mouse init \n");
     mouse_init();
 
+    color_printk(RED, BLACK, "disk init \n");
+    disk_init();
+
     SMP_init();
 
     icr_entry.vector = 0;
@@ -154,11 +157,10 @@ void Start_Kernel(void)
 
     color_printk(RED, BLACK,"HPET init \n");
     HPET_init();
-    while (1);
-    sti();
-//  color_printk(RED, BLACK,"task init \n");
-//  task_init();
 
+    color_printk(RED, BLACK,"task init \n");
+    task_init();
+    sti();
 
     while (1) {
         

@@ -7,7 +7,8 @@ AS := as
 # 目標文件
 OBJECTS := head.o entry.o APU_boot.o main.o printk.o trap.o memory.o \
 			interrupt.o PIC.o task.o cpu.o keyboard.o mouse.o \
-			disk.o SMP.o time.o HPET.o timer.o softirq.o schedule.o
+			disk.o SMP.o time.o HPET.o timer.o softirq.o schedule.o \
+			fat32.o
 
 $(info $(OBJECTS))
 
@@ -15,7 +16,6 @@ all: system
 	objcopy -I elf64-x86-64 -S -R ".eh_frame" -R ".comment" -O binary system kernel.bin
 
 system:	$(OBJECTS)
-	@echo "Linking objects: $(OBJECTS)"
 	ld -b elf64-x86-64 -z muldefs -o system $(OBJECTS) -T Kernel.lds 
 
 # 通用規則:編譯.s文件

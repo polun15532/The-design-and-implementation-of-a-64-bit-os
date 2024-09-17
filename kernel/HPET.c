@@ -25,7 +25,7 @@ void HPET_handler(unsigned long nr, unsigned long parameter, struct pt_regs *reg
     struct timer_list *timer = NULL;
     struct INT_CMD_REG icr_entry;
     jiffies++;
-
+/*
     memset(&icr_entry, 0, sizeof(struct INT_CMD_REG));
     icr_entry.vector = 0xc8;
     icr_entry.dest_shorthand = ICR_ALL_EXCLUDE_Self; // 傳遞給所有處理器，但不包含自己。
@@ -33,7 +33,7 @@ void HPET_handler(unsigned long nr, unsigned long parameter, struct pt_regs *reg
     icr_entry.dest_mode = ICR_IOAPIC_DELV_PHYSICAL;
     icr_entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
     wrmsr(0x830, *(unsigned long *)&icr_entry);
-
+*/
     timer = container_of(list_next(&timer_list_head.list), struct timer_list, list);
     if (timer->expire_jiffies <= jiffies)
         set_softirq_status(TIMER_SIRQ);
@@ -61,11 +61,11 @@ void HPET_init()
     unsigned char *HPET_addr = (unsigned char*)Phy_To_Virt(0xfed00000); // HPET暫存器組的地址映射從這裡開始。
     struct IO_APIC_RET_entry entry;
     // color_printk(RED, BLACK, "HPET - GCAP_ID:<%#018lx>\n", *(unsigned long *)HPET_addr);
-    
+/*    
     get_cmos_time(&time);
     color_printk(RED, BLACK, "year%0x,month:%x,day:%x,hour:%x,mintue:%x,second:%x\n",
                  time.year,time.month,time.day,time.hour,time.minute,time.second);
-
+*/
     //init I/O APIC IRQ2 => HPET Timer 0
     entry.vector = 34;
     entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
