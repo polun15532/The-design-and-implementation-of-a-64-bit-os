@@ -201,7 +201,6 @@ void do_general_protection(struct pt_regs *regs, unsigned long error_code)
 void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
     unsigned long cr2 = 0;
-
     __asm__	__volatile__("movq	%%cr2,	%0":"=r"(cr2)::"memory"); // 將cr2暫存器的值放入變數cr2中
 
     color_printk(RED, BLACK, "do_page_fault(14),ERROR_CODE:%#018lx,RSP:%#018lx,RIP:%#018lx,CPU:%#018lx\n", error_code, regs->rsp, regs->rip, SMP_cpu_id());
@@ -226,8 +225,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long error_code)
         color_printk(RED, BLACK, ",Instruction fetch Cause Fault"); // 取得指令時是否觸發異常
 
     color_printk(RED, BLACK, "\n");
-
-    color_printk(RED, BLACK, "CR2:%#018lx\n",cr2);
+    color_printk(RED, BLACK, "CR2:%#018lx\n", cr2);
 
     while(1)
         hlt();

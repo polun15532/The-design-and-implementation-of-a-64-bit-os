@@ -110,8 +110,9 @@ void Start_SMP()
 
     load_TR(10 + global_i * 2);
     spin_unlock(&SMP_lock);
+
     current->preempt_count = 0;  // 歸零
-    sti();
+
     while(1)
         hlt();
 }

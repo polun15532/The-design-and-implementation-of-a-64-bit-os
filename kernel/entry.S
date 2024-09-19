@@ -93,6 +93,7 @@ reschedule:
     jmp     RESTORE_ALL
 
 ENTRY(system_call)
+//    sti;
     subq    $0x38,  %rsp;
     cld;
     pushq   %rax;
@@ -119,7 +120,6 @@ ENTRY(system_call)
     movq    %rdx,	%ds;
     movq    %rdx,	%es;
     movq    %rsp,	%rdi
-    sti;
     callq   system_call_function
 
 ENTRY(ret_system_call)

@@ -812,7 +812,7 @@ unsigned long slab_init()
     i = Virt_To_Phy(memory_management_struct.end_of_struct) >> PAGE_2M_SHIFT;
     for (j = PAGE_2M_ALIGN(Virt_To_Phy(tmp_address)) >> PAGE_2M_SHIFT; j <= i; j++) {
         // PAGE_2M_ALIGN將以地址的上邊界對齊。j <= i的比較可以標示出那些已經使用而尚未記錄的頁。
-        page = memory_management_struct.end_of_struct + j;
+        page = (struct Page*)(memory_management_struct.end_of_struct + j);
         *(memory_management_struct.bits_map + ((page->PHY_address >> PAGE_2M_SHIFT) >> 6)) |= 1UL << (page->PHY_address >> PAGE_2M_SHIFT) % 64;
         page->zone_struct->page_using_count++;
         page->zone_struct->page_free_count--;

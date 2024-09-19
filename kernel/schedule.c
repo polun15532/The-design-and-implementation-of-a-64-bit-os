@@ -56,8 +56,8 @@ void schedule()
     current->flags &= ~NEED_SCHEDULE;
     tsk = get_next_task();
 
-    color_printk(RED, BLACK, "RFLAGS:%#018lx\n", get_rflags());
-    color_printk(RED, BLACK, "#schedule:%ld#%ld|%ld\n", jiffies, current->vrun_time, tsk->vrun_time);
+    // color_printk(RED, BLACK, "RFLAGS:%#018lx\n", get_rflags());
+    // color_printk(RED, BLACK, "#schedule:%ld#%ld|%ld\n", jiffies, current->vrun_time, tsk->vrun_time);
 
     if (current->vrun_time >= tsk->vrun_time || current->state != TASK_RUNNING) {
         if (current->state == TASK_RUNNING)
@@ -68,11 +68,11 @@ void schedule()
             switch (tsk->priority) {
                 case 0:
                 case 1:
-                    task_schedule[cpu_id].CPU_exec_task_jiffies = 4 / task_schedule[cpu_id].running_task_count;
+                    task_schedule[cpu_id].CPU_exec_task_jiffies = 80 / task_schedule[cpu_id].running_task_count;
                     break;
                 case 2:
                 default:
-                    task_schedule[cpu_id].CPU_exec_task_jiffies = 4 / task_schedule[cpu_id].running_task_count * 3;
+                    task_schedule[cpu_id].CPU_exec_task_jiffies = 80 / task_schedule[cpu_id].running_task_count * 3;
                     break;                    
             }
         }
@@ -83,11 +83,11 @@ void schedule()
             switch (tsk->priority) {
                 case 0:
                 case 1:
-                    task_schedule[cpu_id].CPU_exec_task_jiffies = 4 / task_schedule[cpu_id].running_task_count;
+                    task_schedule[cpu_id].CPU_exec_task_jiffies = 80 / task_schedule[cpu_id].running_task_count;
                     break;
                 case 2:
                 default:
-                    task_schedule[cpu_id].CPU_exec_task_jiffies = 4 / task_schedule[cpu_id].running_task_count * 3;
+                    task_schedule[cpu_id].CPU_exec_task_jiffies = 80 / task_schedule[cpu_id].running_task_count * 3;
                     break;                    
             }
         }

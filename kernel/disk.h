@@ -51,8 +51,6 @@ struct request_queue {
     long block_request_count; // 剩餘請求數量
 };
 
-struct request_queue disk_request;
-
 struct Disk_Identify_Info { //ATA/ATAPI-8
     //	0	General configuration bit-significant information
     unsigned short General_Config;

@@ -7,7 +7,7 @@
 #include "schedule.h"
 #include "printk.h"
 #include "SMP.h"
-#include "disk.h"
+#include "fat32.h"
 
 
 struct mm_struct init_mm = {0};
@@ -46,6 +46,7 @@ unsigned long sys_printf(struct pt_regs *regs)
     color_printk(BLACK, WHITE, (char*)regs->rdi);
     color_printk(RED, BLACK, "FAT32 init\n");
     DISK1_FAT32_FS_init();
+    sti();
     return 1;    
 }
 
@@ -54,7 +55,6 @@ void user_level_function()
 {
     long ret = 0;
     char string[]="Hello World!\n";
-
     __asm__ __volatile__ (
                     "leaq   sysexit_return_address(%%rip),  %%rdx   \n\t"
                     "movq   %%rsp,  %%rcx       \n\t"
@@ -243,14 +243,11 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
     else
         color = YELLOW;
 
-    for (int i = 0; i < 3000000; ++i)
-        nop();
-
-    color_printk(color, BLACK, "prev->thread->rsp0:%#018lx\t", prev->thread->rsp0);
+    // color_printk(color, BLACK, "prev->thread->rsp0:%#018lx\t", prev->thread->rsp0);
     color_printk(color, BLACK, "prev->thread->rsp :%#018lx\n", prev->thread->rsp);
-    color_printk(color, BLACK, "next->thread->rsp0:%#018lx\t", next->thread->rsp0);
+    // color_printk(color, BLACK, "next->thread->rsp0:%#018lx\t", next->thread->rsp0);
     color_printk(color, BLACK, "next->thread->rsp :%#018lx\n", next->thread->rsp);
-    color_printk(color, BLACK, "CPUID:%#018lx\n", SMP_cpu_id());
+    // color_printk(color, BLACK, "CPUID:%#018lx\n", SMP_cpu_id());
 }
 
 void task_init()
@@ -276,7 +273,6 @@ void task_init()
     wrmsr(0x174, KERNEL_CS); // KERNEL_CS = 0x8表示載入第一個GDT描述符。
     wrmsr(0x175, current->thread->rsp0); // 系統調用的rsp
     wrmsr(0x176, (unsigned long)system_call); // 系統調用的rip
-
     init_tss[SMP_cpu_id()].rsp0 = init_thread.rsp0;
     
     list_init(&init_task_union.task.list); // 初始化任務佇列

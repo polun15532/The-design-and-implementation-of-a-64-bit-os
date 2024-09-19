@@ -36,9 +36,9 @@ void timer_init()
     init_timer(&timer_list_head, NULL, NULL, -1UL); // 哨兵定時器 -1UL = ULLONG_MAX
     register_softirq(0, &do_timer, NULL);
 
-    tmp = (struct timer_list*)kmalloc(sizeof(*tmp), 0);
-    init_timer(tmp, &test_timer, NULL, 500);
-    add_timer(tmp);
+    // tmp = (struct timer_list*)kmalloc(sizeof(*tmp), 0);
+    // init_timer(tmp, &test_timer, NULL, 500);
+    // add_timer(tmp);
 }
 
 void do_timer(void *data)

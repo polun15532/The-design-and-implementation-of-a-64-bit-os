@@ -6,11 +6,13 @@
 #include "lib.h"
 #include "block.h"
 
+struct request_queue disk_request;
+
 void end_request(struct block_buffer_node *node)
 {
     if (node == NULL)
     color_printk(RED, BLACK, "end_request error\n");
-    node->wait_queue.tsk->state = TASK_RUNNING; // 換醒任務 
+    node->wait_queue.tsk->state = TASK_RUNNING; // 喚醒任務 
     insert_task_queue(node->wait_queue.tsk);     
     node->wait_queue.tsk->flags |= NEED_SCHEDULE;
 
@@ -35,6 +37,7 @@ long cmd_out()
     
     list_del(&disk_request.in_using->wait_queue.wait_list); // 從循環佇列中刪除
     disk_request.block_request_count--;
+
     while(io_in8(PORT_DISK1_STATUS_CMD) & DISK_STATUS_BUSY)
         nop(); // 等待硬碟
 
@@ -107,6 +110,12 @@ void read_handler(unsigned long nr, unsigned long parameter)
         color_printk(RED, BLACK, "read_handler:%#010x\n", io_in8(PORT_DISK1_ERR_FEATURE)); // 取得錯誤狀態
     else
         port_insw(PORT_DISK1_DATA, node->buffer, 256);  // 這裡寫256是因為insw指令每次處理2byte(w表示word)。
+    
+    node->count--;
+    if (node->count) {
+        node->buffer += 512;
+        return;        
+    }
     end_request(node);
 }
 
@@ -116,6 +125,15 @@ void write_handler(unsigned long nr, unsigned long parameter)
 
     if(io_in8(PORT_DISK1_STATUS_CMD) & DISK_STATUS_ERROR)
         color_printk(RED, BLACK, "write_handler:%#010x\n", io_in8(PORT_DISK1_ERR_FEATURE));
+    
+    node->count--;
+    if (node->count) {
+        node->buffer += 512;
+        while(!(io_in8(PORT_DISK1_STATUS_CMD) & DISK_STATUS_REQ))
+            nop();
+        port_outsw(PORT_DISK1_DATA,node->buffer,256);
+        return;
+    }
     end_request(node);
 }
 
@@ -168,14 +186,14 @@ void wait_for_finish()
 long IDE_open()
 {
     // 目前無設置操作
-    color_printk(BLACK ,WHITE, "DISK0 Opened\n");
+    color_printk(BLACK ,WHITE, "DISK1 Opened\n");
     return 1;
 }
 
 long IDE_close()
 {
     // 目前無設置操作
-    color_printk(BLACK, WHITE, "DISK0 Closed\n");
+    color_printk(BLACK, WHITE, "DISK1 Closed\n");
     return 1;
 }
 
@@ -225,15 +243,16 @@ hw_int_controller disk_int_controller = {
 void disk_handler(unsigned long nr, unsigned long parameter, struct pt_regs *regs)
 {
     struct block_buffer_node *node = ((struct request_queue *)parameter)->in_using;
-    if (io_in8(PORT_DISK1_STATUS_CMD) & DISK_STATUS_ERROR)
+    color_printk(BLACK, WHITE, "disk_handler\n");
     node->end_handler(nr, parameter);
 }
 
 void disk_init()
 {
     struct IO_APIC_RET_entry entry;
+
     entry.vector = 0x2f;
-    entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
+    entry.deliver_mode = APIC_ICR_IOAPIC_Fixed ;
     entry.dest_mode = ICR_IOAPIC_DELV_PHYSICAL;
     entry.deliver_status = APIC_ICR_IOAPIC_Idle;
     entry.polarity = APIC_IOAPIC_POLARITY_HIGH;
@@ -258,6 +277,6 @@ void disk_init()
 
 void disk_exit()
 {
-    unregister_irq(0x2e);
+    unregister_irq(0x2f);
 }
 

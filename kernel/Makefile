@@ -8,7 +8,7 @@ AS := as
 OBJECTS := head.o entry.o APU_boot.o main.o printk.o trap.o memory.o \
 			interrupt.o PIC.o task.o cpu.o keyboard.o mouse.o \
 			disk.o SMP.o time.o HPET.o timer.o softirq.o schedule.o \
-			fat32.o
+			fat32.o VFS.o
 
 $(info $(OBJECTS))
 
@@ -28,14 +28,14 @@ system:	$(OBJECTS)
 	$(CC) $(CFLAGS) $< -o $@
 	
 main.o:	main.c
-	gcc  -g $(CFLAGS) main.c -D$(PIC)
+	gcc -g $(CFLAGS) main.c -D$(PIC)
 
 ifeq ($(PIC),APIC)
 PIC.o: APIC.c
-	gcc  $(CFLAGS) APIC.c -o PIC.o
+	gcc $(CFLAGS) APIC.c -o PIC.o
 else
 PIC.o: 8259A.c
-	gcc  $(CFLAGS) 8259A.c -o PIC.o
+	gcc $(CFLAGS) 8259A.c -o PIC.o
 endif
 
 clean:

@@ -17,7 +17,10 @@
 #define __LIB_H__
 
 
-#define NULL 0
+#define NULL    0
+#define true    1
+#define false   0
+
 
 #define container_of(ptr,type,member)       \
 ({                                          \

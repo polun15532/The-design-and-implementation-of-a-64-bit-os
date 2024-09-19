@@ -110,7 +110,7 @@ void Start_Kernel(void)
     wrmsr(0x830, *(unsigned long *)&icr_entry);	//INIT IPI
     // 0x830為ICR暫存器的MSR地址。
     
-    for (global_i = 0; global_i < 3;) {
+    for (global_i = 0; global_i < 0;) {
         spin_lock(&SMP_lock);
         global_i++;
         ptr = (unsigned char*)kmalloc(STACK_SIZE, 0); // AP處理器的stack
