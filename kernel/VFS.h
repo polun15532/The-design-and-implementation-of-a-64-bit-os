@@ -28,16 +28,16 @@ struct dir_entry_operations;
 struct file_operations;
 
 struct file_system_type {
-    char *name;
+    char *name; // 文件系統的名稱
     int fs_flags;
-    struct super_block *(*read_super_block)(struct Disk_Partition_Table_Entry *DPTE, void *buf);
+    struct super_block *(*read_super_block)(struct Disk_Partition_Table_Entry *DPTE, void *buf); // 讀取並初始化超級塊
     struct file_system_type *next;
 };
 
 struct super_block {
-    struct dir_entry *root;
-    struct super_block_operations *sb_ops;
-    void *private_sb_info;
+    struct dir_entry *root; // 文件系統的根目錄項
+    struct super_block_operations *sb_ops; // 超級塊操作方法集合
+    void *private_sb_info; // 超級塊結構體，不同文件系統有不同定義所以使用(void*)指針
 };
 
 struct super_block *mount_fs(char *name, struct Disk_Partition_Table_Entry *DPTE, void *buf);

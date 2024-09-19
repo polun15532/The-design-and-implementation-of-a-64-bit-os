@@ -18,7 +18,7 @@ struct dir_entry *path_walk(char *name, unsigned long flags)
         name++;
 
     if (!*name)
-        return NULL;
+        return parent; // 回傳根目錄
 
     for (;;) {
         tmp_name = name;
@@ -420,7 +420,7 @@ struct dir_entry_operations FAT32_dentry_ops = {
     .iput = FAT32_iput,
 };
 
-void fat32_write_super_block(struct super_block * sb)
+void fat32_write_super_block(struct super_block *sb)
 {
 
 }
@@ -442,25 +442,29 @@ void fat32_write_inode(struct index_node *inode)
     struct FAT32_sb_info *fsbi = inode->sb->private_sb_info;
     unsigned long sector = 0;
 
+    // 檢查是否是根目錄，根目錄不可寫入
     if (finode->dentry_location) {
         color_printk(RED, BLACK, "FS ERROR:write root inode!\n");	
         return;     
     }
 
+    // 計算目錄項所在的扇區
     sector = fsbi->Data_firstsector + (finode->dentry_location - 2) * fsbi->sector_per_cluster;
+
+    // 讀取目錄叢集的內容到緩衝區
     buf = (struct FAT32_Directory*)kmalloc(fsbi->bytes_per_cluster, 0);
     memset(buf, 0, fsbi->bytes_per_cluster);
     IDE_device_operation.transfer(ATA_READ_CMD, 
                                   sector,fsbi->sector_per_cluster,
                                   (unsigned char*)buf);
-    
+    // 定位要更新的目錄項
     fdentry = buf + finode->dentry_position;
-
+    // 更新目錄項的文件大小和起始簇號
     fdentry->DIR_FileSize = inode->file_size;
     fdentry->DIR_FstClusLO = finode->first_cluster & 0xffff;
     fdentry->DIR_FstClusHI = (fdentry->DIR_FstClusHI & 0xf000) |
                              (finode->first_cluster >> 16);
-    
+    // 將更新後的內容寫回硬碟
     IDE_device_operation.transfer(ATA_WRITE_CMD, sector, fsbi->sector_per_cluster, (unsigned char*)buf);
     kfree(buf);
 }
@@ -489,8 +493,8 @@ struct super_block *fat32_read_super_block(struct Disk_Partition_Table_Entry *DP
     sbp->private_sb_info = (struct FAT32_sb_info*)kmalloc(sizeof(struct FAT32_sb_info), 0);
     memset(sbp->private_sb_info, 0, sizeof(struct FAT32_sb_info));
 
-    // FAT32 boot sector
-    fbs = (struct FAT32_BootSector*)buf;
+    // FAT32 boot sector 
+    fbs = (struct FAT32_BootSector*)buf; // 將FAT32文件系統的引導扇區傳遞給fbs
     fsbi = sbp->private_sb_info;
     fsbi->start_sector = DPTE->start_LBA;
     fsbi->sector_count = DPTE->sectors_limit;
@@ -583,10 +587,10 @@ void DISK1_FAT32_FS_init()
     struct dir_entry *dentry = NULL;
     struct Disk_Partition_Table DPT = {0};
 
-    register_file_system(&FAT32_fs_type);
+    register_file_system(&FAT32_fs_type); // 註冊fat32文件系統
 
     memset(buf, 0, sizeof(buf));
-    IDE_device_operation.transfer(ATA_READ_CMD, 0, 1, buf);
+    IDE_device_operation.transfer(ATA_READ_CMD, 0, 1, buf); // 讀取MBR
     
     DPT = *(struct Disk_Partition_Table*)buf;
 
@@ -598,9 +602,9 @@ void DISK1_FAT32_FS_init()
 
     memset(buf, 0, sizeof(buf));
     // 根據分區表讀取FAT32文件的起始扇區。
-    IDE_device_operation.transfer(ATA_READ_CMD, DPT.DPTE[0].start_LBA, 1, buf);
+    IDE_device_operation.transfer(ATA_READ_CMD, DPT.DPTE[0].start_LBA, 1, buf); // 讀取FAT32文件系統的超級塊。
     
-    root_sb = mount_fs("FAT32", &DPT.DPTE[0], buf);
+    root_sb = mount_fs("FAT32", &DPT.DPTE[0], buf); // 初始化FAT32文件系統的超級塊信息與根目錄項。
 
     dentry = path_walk("/JIOL123Llliwos/89AIOlejk.TXT", 0); // 測試
     if(dentry != NULL) {
