@@ -443,7 +443,7 @@ void fat32_write_inode(struct index_node *inode)
     unsigned long sector = 0;
 
     // 檢查是否是根目錄，根目錄不可寫入
-    if (finode->dentry_location) {
+    if (finode->dentry_location == NULL) {
         color_printk(RED, BLACK, "FS ERROR:write root inode!\n");	
         return;     
     }
