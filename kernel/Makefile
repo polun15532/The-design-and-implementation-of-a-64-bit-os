@@ -6,7 +6,7 @@ AS := as
 
 # 目標文件
 OBJECTS := head.o entry.o APU_boot.o main.o printk.o trap.o memory.o \
-			interrupt.o PIC.o task.o cpu.o keyboard.o mouse.o \
+			interrupt.o PIC.o task.o cpu.o keyboard.o mouse.o semaphore.o \
 			disk.o SMP.o time.o HPET.o timer.o softirq.o schedule.o \
 			fat32.o VFS.o sys.o syscalls.o
 

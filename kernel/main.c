@@ -1,4 +1,3 @@
-#include "lib.h"
 #include "printk.h"
 #include "gate.h"
 #include "trap.h"
@@ -13,10 +12,8 @@
 #include "spinlock.h"
 #include "HPET.h"
 #include "timer.h"
-#include "atomic.h"
-#include "semaphore.h"
-#include "fat32.h"
 #include "softirq.h"
+#include "schedule.h"
 
 void Start_Kernel(void)
 {
