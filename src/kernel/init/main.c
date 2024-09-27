@@ -1,4 +1,3 @@
-#include "lib.h"
 #include "printk.h"
 #include "gate.h"
 #include "trap.h"
@@ -13,10 +12,8 @@
 #include "spinlock.h"
 #include "HPET.h"
 #include "timer.h"
-#include "atomic.h"
-#include "semaphore.h"
-#include "fat32.h"
 #include "softirq.h"
+#include "schedule.h"
 
 void Start_Kernel(void)
 {
@@ -106,7 +103,7 @@ void Start_Kernel(void)
     wrmsr(0x830, *(unsigned long *)&icr_entry);	//INIT IPI
     // 0x830為ICR暫存器的MSR地址。
     
-    for (global_i = 0; global_i < 0;) {
+    for (global_i = 0; global_i < 3;) {
         spin_lock(&SMP_lock);
         global_i++;
         ptr = (unsigned char*)kmalloc(STACK_SIZE, 0); // AP處理器的stack

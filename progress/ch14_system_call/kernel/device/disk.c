@@ -6,6 +6,7 @@
 #include "lib.h"
 #include "block.h"
 #include "semaphore.h"
+#include "schedule.h"
 
 static int disk_flags = 0;
 
@@ -20,8 +21,7 @@ void end_request(struct block_buffer_node *node)
         color_printk(RED, BLACK, "end_request error\n");
     node->wait_queue.tsk->state = TASK_RUNNING; // 喚醒任務 
     insert_task_queue(node->wait_queue.tsk);     
-    node->wait_queue.tsk->flags |= NEED_SCHEDULE;
-
+    current->flags |= NEED_SCHEDULE;
     kfree((unsigned long*)disk_request.in_using);
     disk_request.in_using = NULL;
     
