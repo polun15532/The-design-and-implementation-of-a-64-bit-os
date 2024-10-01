@@ -8,10 +8,8 @@ echo "Compiling bootloader..."
 make -C "$BASEDIR/src/bootloader" || { echo "Bootloader compilation failed"; exit 1; }
 echo "Compiling kernel..."
 make -C "$BASEDIR/src/kernel" || { echo "Kernel compilation failed"; exit 1; }
-objdump -d ./src/kernel/system > a.asm
 echo "Compiling user program..."
 make -C "$BASEDIR/src/user" || { echo "User program compilation failed"; exit 1; }
-objdump -d ./src/user/system_api_lib > b.asm
 echo "Compiling test program..."
 make -C "$BASEDIR/src/test" || { echo "TestUser program compilation failed"; exit 1; }
 
