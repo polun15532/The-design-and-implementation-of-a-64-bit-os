@@ -6,7 +6,7 @@
 #include "linkage.h"
 #include "spinlock.h"
 
-// 這裡的聚集將對應變數flags，數字表示位域
+// 這裡的巨集將對應變數flags，數字表示位域
 #define ZEROPAD	1   // bit0用數字的前導0取代空格
 #define SIGN    2   // bit1無符號或是有符號(有符號表示印出+)
 #define PLUS    4

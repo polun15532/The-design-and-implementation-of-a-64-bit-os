@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "mouse.h"
 #include "keyboard.h"
 #include "lib.h"
@@ -13,7 +28,7 @@ void mouse_handler(unsigned long nr, unsigned long parameter, struct pt_regs * r
 {
     unsigned char x;
     x = io_in8(PORT_KB_DATA);
-    color_printk(GREEN, WHITE, "(M:%02x)", x);
+    // color_printk(GREEN, WHITE, "(M:%02x)", x);
 
     if (p_mouse->p_head == p_mouse->buf + KB_BUF_SIZE)
         p_mouse->p_head = p_mouse->buf;
@@ -25,7 +40,7 @@ void mouse_handler(unsigned long nr, unsigned long parameter, struct pt_regs * r
 
 unsigned char get_mousecode()
 {
-    unsigned char ret  = 0;
+    unsigned char ret = 0;
 
      if (p_mouse->count == 0)
         while(!p_mouse->count)
@@ -82,7 +97,7 @@ hw_int_controller mouse_int_controller = {
 void mouse_init()
 {
     struct IO_APIC_RET_entry entry;
-    unsigned long i, j;
+    unsigned long i;
 
     p_mouse = (struct keyboard_inputbuffer*)kmalloc(sizeof(struct keyboard_inputbuffer), 0);
     
@@ -112,18 +127,16 @@ void mouse_init()
     wait_KB_write();
     io_out8(PORT_KB_CMD, KBCMD_EN_MOUSE_INTFACE);
 
-    for(i = 0; i < 1000; i++)
-        for(j = 0; j < 1000; j++)
-            nop();
+    for(i = 0; i < 1000000; i++)
+        nop();
 
     wait_KB_write();
     io_out8(PORT_KB_CMD, KBCMD_SENDTO_MOUSE);
     wait_KB_write();
     io_out8(PORT_KB_DATA, MOUSE_ENABLE);
 
-    for(i = 0; i < 1000; i++)
-        for(j = 0; j < 1000; j++)
-            nop();
+    for(i = 0; i < 1000000; i++)
+        nop();
 
     wait_KB_write();
     io_out8(PORT_KB_CMD, KBCMD_WRITE_CMD);

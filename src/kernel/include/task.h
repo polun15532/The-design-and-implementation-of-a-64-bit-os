@@ -21,6 +21,7 @@
 #include "lib.h"
 #include "ptrace.h"
 #include "VFS.h"
+#include "waitqueue.h"
 
 
 #define KERNEL_CS 	(0x08)
@@ -94,8 +95,10 @@ struct task_struct {
     long pid;
     long priority;
     long vrun_time;
+    long exit_code;
 
     struct file *file_struct[TASK_FILE_MAX];
+    wait_queue_t wait_childexit;
     struct task_struct *next;
     struct task_struct *parent;
 };
@@ -162,9 +165,7 @@ struct tss_struct {
     .iomapbaseaddr = 0  \
 }
 
-extern struct task_struct *get_current();
-
-inline struct task_struct *get_current()
+static inline struct task_struct *get_current()
 {
     struct task_struct * current = NULL;
     __asm__ __volatile__ ("andq %%rsp, %0    \n\t":"=r"(current):"0"(~32767UL));
@@ -198,13 +199,13 @@ do {                                                        \
 long get_pid();
 void wakeup_process(struct task_struct *tsk);
 void exit_files(struct task_struct *tsk);
+void exit_mm(struct task_struct *tsk);
 
-unsigned long do_fork(struct pt_regs * regs, unsigned long clone_flags, unsigned long stack_start, unsigned long stack_size);
-unsigned long do_execve(struct pt_regs *regs, char *name);
+unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned long stack_start, unsigned long stack_size);
+unsigned long do_execve(struct pt_regs *regs, char *name, char *argv[], char *envp[]);
 unsigned long do_exit(unsigned long exit_code);
 
 void task_init();
-
 void switch_mm(struct task_struct *prev,struct task_struct *next);
 
 extern void ret_system_call(void);

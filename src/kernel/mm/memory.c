@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "memory.h"
 #include "printk.h"
 #include "lib.h"
@@ -839,9 +854,10 @@ unsigned long slab_init()
         page->zone_struct->page_free_count--;
         page_init(page, PG_PTable_Maped | PG_Kernel_Init | PG_Kernel);
     }
+/*
     color_printk(ORANGE ,BLACK, "2.memory_management_struct.bits_map:%#018lx\tzone_struct->page_using_count:%d\tzone_struct->page_free_count:%d\n"
                 , *memory_management_struct.bits_map, memory_management_struct.zones_struct->page_using_count, memory_management_struct.zones_struct->page_free_count);
-    
+*/
     for (i = 0; i < 16; i++) {
         // 連續分配16個頁給內存池。
         virtual = (unsigned long*)((memory_management_struct.end_of_struct + PAGE_2M_SIZE * i + PAGE_2M_SIZE - 1) & PAGE_2M_MASK);

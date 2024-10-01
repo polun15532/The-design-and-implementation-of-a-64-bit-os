@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "fat32.h"
 #include "VFS.h"
 #include "disk.h"
@@ -16,11 +31,6 @@ unsigned int DISK1_FAT32_read_FAT_Entry(struct FAT32_sb_info *fsbi, unsigned int
                                   1,
                                   (unsigned char*)buf);
     // FAT表中一個扇區具有128個FAT表項，這裡右移7位可直接定位目標FAT表項的儲存扇區。
-    color_printk(BLUE,
-                 WHITE,
-                 "DISK1_FAT32_read_FAT_Entry fat_entry:%#018lx,%#010x\n",
-                 fat_entry,
-                 buf[fat_entry & 0x7f]);
 
     return buf[fat_entry & 0x7f] & 0x0fffffff;
 }
@@ -48,6 +58,128 @@ unsigned long DISK1_FAT32_write_FAT_Entry(struct FAT32_sb_info *fsbi, unsigned i
                                   1,
                                   (unsigned char *)buf);
     return 1;	
+}
+
+long FAT32_readdir(struct file *filp, void *dirent, filldir_t filler)
+{
+    struct FAT32_inode_info *finode = filp->dentry->dir_inode->private_index_info;
+    struct FAT32_sb_info *fsbi = filp->dentry->dir_inode->sb->private_sb_info;
+    unsigned int cluster = finode->first_cluster;
+    unsigned long sector = 0;
+    unsigned char *buf = NULL;
+    char *name = NULL;
+    int namelen = 0;
+    int i = 0, j = 0, x = 0, y = 0;
+    struct FAT32_Directory *tmp_dentry = NULL;
+    struct FAT32_LongDirectory *tmp_ldentry = NULL;    
+
+    buf = kmalloc(fsbi->bytes_per_cluster, 0);
+    cluster = finode->first_cluster;
+    j = filp->position / fsbi->bytes_per_cluster;
+
+    for (i = 0; i < j; i++) {
+        cluster = DISK1_FAT32_read_FAT_Entry(fsbi, cluster);
+        if (cluster > 0x0ffffff7) {
+            color_printk(RED, BLACK, "FAT32 FS(readdir) cluster didn`t exist\n");
+            return NULL;
+        }
+    }
+next_cluster:
+    sector = fsbi->Data_firstsector + (cluster - 2) * fsbi->sector_per_cluster;
+    if (!IDE_device_operation.transfer(ATA_READ_CMD, sector, fsbi->sector_per_cluster, buf)) {
+        color_printk(RED, BLACK, "FAT32 FS(readdir) read disk ERROR!!!!!!!!!!\n");
+        kfree(buf);
+        return NULL;
+    }
+    tmp_dentry = (struct FAT32_Directory*)(buf + filp->position % fsbi->bytes_per_cluster);
+
+for(i = filp->position%fsbi->bytes_per_cluster;i < fsbi->bytes_per_cluster;i += 32,tmp_dentry++,filp->position += 32)
+    {
+        if(tmp_dentry->DIR_Attr == ATTR_LONG_NAME)
+            continue;
+        if(tmp_dentry->DIR_Name[0] == 0xe5 || tmp_dentry->DIR_Name[0] == 0x00 || tmp_dentry->DIR_Name[0] == 0x05)
+            continue;
+
+        namelen = 0;
+        tmp_ldentry = (struct FAT32_LongDirectory *)tmp_dentry-1;
+
+        if(tmp_ldentry->LDIR_Attr == ATTR_LONG_NAME && tmp_ldentry->LDIR_Ord != 0xe5 && tmp_ldentry->LDIR_Ord != 0x00 && tmp_ldentry->LDIR_Ord != 0x05)
+        {
+            j = 0;
+            //long file/dir name read
+            while(tmp_ldentry->LDIR_Attr == ATTR_LONG_NAME  && tmp_ldentry->LDIR_Ord != 0xe5 && tmp_ldentry->LDIR_Ord != 0x00 && tmp_ldentry->LDIR_Ord != 0x05)
+            {
+                j++;
+                if(tmp_ldentry->LDIR_Ord & 0x40)
+                    break;
+                tmp_ldentry --;
+            }
+
+            name = kmalloc(j*13+1,0);
+            memset(name,0,j*13+1);
+            tmp_ldentry = (struct FAT32_LongDirectory *)tmp_dentry-1;
+
+            for(x = 0;x<j;x++,tmp_ldentry --)
+            {
+                for(y = 0;y<5;y++)
+                    if(tmp_ldentry->LDIR_Name1[y] != 0xffff && tmp_ldentry->LDIR_Name1[y] != 0x0000)
+                        name[namelen++] = (char)tmp_ldentry->LDIR_Name1[y];
+
+                for(y = 0;y<6;y++)
+                    if(tmp_ldentry->LDIR_Name2[y] != 0xffff && tmp_ldentry->LDIR_Name1[y] != 0x0000)
+                        name[namelen++] = (char)tmp_ldentry->LDIR_Name2[y];
+
+                for(y = 0;y<2;y++)
+                    if(tmp_ldentry->LDIR_Name3[y] != 0xffff && tmp_ldentry->LDIR_Name1[y] != 0x0000)
+                        name[namelen++] = (char)tmp_ldentry->LDIR_Name3[y];
+            }
+            goto find_lookup_success;
+        }
+
+        name = kmalloc(15,0);
+        memset(name,0,15);
+        //short file/dir base name compare
+        for(x=0;x<8;x++)
+        {
+            if(tmp_dentry->DIR_Name[x] == ' ')
+                break;
+            if(tmp_dentry->DIR_NTRes & LOWERCASE_BASE)
+                name[namelen++] = tmp_dentry->DIR_Name[x] + 32;
+            else
+                name[namelen++] = tmp_dentry->DIR_Name[x];
+        }
+
+        if(tmp_dentry->DIR_Attr & ATTR_DIRECTORY)
+            goto find_lookup_success;
+
+        name[namelen++] = '.';
+
+        //short file ext name compare
+        for(x=8;x<11;x++)
+        {
+            if(tmp_dentry->DIR_Name[x] == ' ')
+                break;
+            if(tmp_dentry->DIR_NTRes & LOWERCASE_EXT)
+                name[namelen++] = tmp_dentry->DIR_Name[x] + 32;
+            else
+                name[namelen++] = tmp_dentry->DIR_Name[x];
+        }
+        if(x == 8)
+            name[--namelen] = 0;
+        goto find_lookup_success;
+    }
+    
+    cluster = DISK1_FAT32_read_FAT_Entry(fsbi,cluster);
+    if(cluster < 0x0ffffff7)
+        goto next_cluster;
+
+    kfree(buf);
+    return NULL;
+
+find_lookup_success:
+
+    filp->position += 32;
+    return filler(dirent,name,namelen,0,0);
 }
 
 long FAT32_open(struct index_node *inode, struct file *filp)
@@ -292,7 +424,8 @@ struct file_operations FAT32_file_ops = {
     .read = FAT32_read,
     .write = FAT32_write,
     .lseek = FAT32_lseek,
-    .ioctl = FAT32_ioctl
+    .ioctl = FAT32_ioctl,
+    .readdir = FAT32_readdir
 };
 
 long FAT32_create(struct index_node *inode, struct dir_entry *dentry, int mode)
@@ -495,6 +628,8 @@ find_lookup_success:
     finode->write_date = tmp_dentry->DIR_WrtTime;
     finode->write_time = tmp_dentry->DIR_WrtDate;
 
+    if (!strncmp((unsigned char*)tmp_dentry->DIR_Name + 8, "DEV", 3))
+        p->attribute |= FS_ATTR_DEVICE;
     dst_dentry->dir_inode = p;
     kfree(buf);
     return dst_dentry;

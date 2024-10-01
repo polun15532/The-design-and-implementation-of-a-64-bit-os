@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "cpu.h"
 #include "printk.h"
 
@@ -34,8 +49,8 @@ void init_cpu(void)
 
 	//max cpuid operation code
 	get_cpuid(0, 0, &CpuFacName[0], &CpuFacName[1], &CpuFacName[2], &CpuFacName[3]);
-	color_printk(WHITE, BLACK, "MAX Basic Operation Code :%#010x\t", CpuFacName[0]);
+	// color_printk(WHITE, BLACK, "MAX Basic Operation Code :%#010x\t", CpuFacName[0]);
 
 	get_cpuid(0x80000000, 0, &CpuFacName[0], &CpuFacName[1], &CpuFacName[2], &CpuFacName[3]);
-	color_printk(WHITE, BLACK, "MAX Extended Operation Code :%#010x\n",CpuFacName[0]);
+	// color_printk(WHITE, BLACK, "MAX Extended Operation Code :%#010x\n",CpuFacName[0]);
 }

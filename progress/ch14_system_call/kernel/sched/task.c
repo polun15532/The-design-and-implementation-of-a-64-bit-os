@@ -191,7 +191,7 @@ unsigned long copy_mm(unsigned long clone_flags, struct task_struct *tsk)
            PAGE_4K_SIZE / 2);
     // 複複製 PML4 頁表的後半部分（從第 256 項開始)也就是核心層空間
 
-    memset(Phy_To_Virt(newmm->pgd) + 256, 0, PAGE_4K_SIZE / 2);
+    memset(Phy_To_Virt(newmm->pgd), 0, PAGE_4K_SIZE / 2);
     // 清空前 256 項的頁表，這些頁表指向應用層空間
 
     // 接下來將為新行程配置頁表，這裡假設行程使用的空間小於 2 MB

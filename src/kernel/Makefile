@@ -9,9 +9,6 @@ LD := ld
 
 LINK_SCRIPT = link/Kernel.lds
 
-# 打印 PIC 變數以便檢查
-$(info PIC = '$(PIC)')
-
 # 指定源文件目錄
 SRC_DIRS := init log exception mm device ipc timer sched fs sys
 

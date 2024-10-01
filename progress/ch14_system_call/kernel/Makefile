@@ -13,7 +13,7 @@ LINK_SCRIPT = link/Kernel.lds
 $(info PIC = '$(PIC)')
 
 # 指定源文件目錄
-SRC_DIRS := init log exception mm device lock timer sched fs sys
+SRC_DIRS := init log exception mm device ipc timer sched fs sys
 
 # 根據條件選擇排除 APIC.c 或 8259A.c
 ifeq ($(strip $(PIC)), APIC)

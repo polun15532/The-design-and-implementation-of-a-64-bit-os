@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "APIC.h"
 #include "lib.h"
 #include "printk.h"
@@ -199,7 +214,7 @@ void Local_APIC_init()
                           :"=a"(x), "=d"(y)
                           :
                           :"memory");
-
+/*
     color_printk(WHITE, BLACK, "local APIC Version:%#010x,Max LVT Entry:%#010x,SVR(Suppress EOI Broadcast):%#04x\t"
                 , x & 0xff, (x >> 16 & 0xff) + 1, x >> 24 & 0x1);
 
@@ -207,7 +222,7 @@ void Local_APIC_init()
         color_printk(WHITE, BLACK, "82489DX discrete APIC\n");
     else if((x & 0xff) >= 0x10 && (x & 0xff) <= 0x15)
         color_printk(WHITE, BLACK,"Integrated APIC\n");
-    
+*/    
     // mask all LVT
     __asm__ __volatile__( "movq $0x82f, %%rcx \n\t" // CMCI
                           "wrmsr              \n\t"
@@ -282,7 +297,7 @@ void APIC_IOAPIC_init()
         // 前32個向量號是系統中斷不能用，這裡的0是指不切換stack。
     }
 
-    color_printk(GREEN, BLACK, "MASK 8259A\n");
+    // color_printk(GREEN, BLACK, "MASK 8259A\n");
     io_out8(0x21, 0xff); // 屏蔽8259A主晶片所有中斷
     io_out8(0xa1, 0xff); // 屏蔽8259A從晶片所有中斷
 
@@ -300,9 +315,9 @@ void APIC_IOAPIC_init()
 
     io_out32(0xcf8, 0x8000f8f0);
     x = io_in32(0xcfc);
-    color_printk(RED,BLACK,"Get RCBA Address:%#010x\n", x);	
+    // color_printk(RED,BLACK,"Get RCBA Address:%#010x\n", x);	
     x &= 0xffffc000;
-    color_printk(RED,BLACK,"Get RCBA Address:%#010x\n", x);
+    // color_printk(RED,BLACK,"Get RCBA Address:%#010x\n", x);
 
     //get OIC address
     if (x > 0xfec00000 && x < 0xfee00000) {

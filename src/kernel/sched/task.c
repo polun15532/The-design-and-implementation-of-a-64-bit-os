@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "task.h"
 #include "ptrace.h"
 #include "lib.h"
@@ -44,7 +59,7 @@ struct task_struct *get_task(long pid)
     return NULL;
 }
 
-struct file *open_exec_file(char * path)
+struct file *open_exec_file(char *path)
 {
     struct dir_entry *dentry = NULL;
     struct file *filp = NULL;
@@ -84,7 +99,12 @@ unsigned long init(unsigned long arg)
                           "pushq   %2          \n\t"
                           "jmp     do_execve   \n\t"
                           :
-                          :"D"(current->thread->rsp),"m"(current->thread->rsp),"m"(current->thread->rip),"S"("/init.bin")
+                          :"D"(current->thread->rsp),
+                           "m"(current->thread->rsp),
+                           "m"(current->thread->rip),
+                           "S"("/init.bin"),
+                           "d"(NULL),
+                           "c"(NULL)
                           :"memory");
     return 1;
 }
@@ -189,9 +209,9 @@ unsigned long copy_mm(unsigned long clone_flags, struct task_struct *tsk)
     memcpy(Phy_To_Virt(init_task[SMP_cpu_id()]->mm->pgd) + 256,
            Phy_To_Virt(newmm->pgd)+ 256,
            PAGE_4K_SIZE / 2);
-    // 複複製 PML4 頁表的後半部分（從第 256 項開始)也就是核心層空間
+    // 複製 PML4 頁表的後半部分（從第 256 項開始)也就是核心層空間
 
-    memset(Phy_To_Virt(newmm->pgd) + 256, 0, PAGE_4K_SIZE / 2);
+    memset(Phy_To_Virt(newmm->pgd), 0, PAGE_4K_SIZE / 2);
     // 清空前 256 項的頁表，這些頁表指向應用層空間
 
     // 接下來將為新行程配置頁表，這裡假設行程使用的空間小於 2 MB
@@ -213,18 +233,19 @@ unsigned long copy_mm(unsigned long clone_flags, struct task_struct *tsk)
                      ((code_start_addr >> PAGE_2M_SHIFT) & 0x1ff));
     p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped);
     set_pdt(tmp, mk_pdt(p->PHY_address, PAGE_USER_Page));	
-    
+
     // 將當前行程的程式碼段從間複製到新頁中
     memcpy((void*)code_start_addr,
            Phy_To_Virt(p->PHY_address),
            stack_start_addr - code_start_addr);
-    if (current->mm->end_brk != current->mm->start_brk) {
+
+    if (current->mm->end_brk > current->mm->start_brk) {
         tmp = Phy_To_Virt((unsigned long*)((unsigned long)newmm->pgd & (~0xfffUL)) +
                          ((brk_start_addr >> PAGE_GDT_SHIFT) & 0x1ff));
-		
+        
         tmp = Phy_To_Virt((unsigned long*)(*tmp & (~0xfffUL)) +
                          ((brk_start_addr >> PAGE_1G_SHIFT) & 0x1ff));
-		
+        
         tmp = Phy_To_Virt((unsigned long*)(*tmp & (~0xfffUL)) +
                          ((brk_start_addr >> PAGE_2M_SHIFT) & 0x1ff));
 
@@ -316,85 +337,97 @@ void exit_thread(struct task_struct *tsk)
 
 }
 
-unsigned long do_fork(struct pt_regs *regs,
-                      unsigned long clone_flags,
-                      unsigned long stack_start,
-                      unsigned long stack_size)
+unsigned long do_fork(struct pt_regs * regs, unsigned long clone_flags, unsigned long stack_start, unsigned long stack_size)
 {
+	int retval = 0;
+	struct task_struct *tsk = NULL;
 
-    int retval = 0;
-    struct task_struct *tsk = NULL;
+//	alloc & copy task struct
+	tsk = (struct task_struct *)kmalloc(STACK_SIZE,0);
+	color_printk(WHITE,BLACK,"struct task_struct address:%#018lx\n",(unsigned long)tsk);
 
-    // alloc & copy task struct
+	if(tsk == NULL)
+	{
+		retval = -EAGAIN;
+		goto alloc_copy_task_fail;
+	}
 
-    tsk = (struct task_struct*)kmalloc(STACK_SIZE, 0); // 分配 stack 空間。
-    
-    if (tsk == NULL) {
-        retval = -EAGAIN;
-        goto alloc_copy_task_fail;        
-    }
-    
-    color_printk(WHITE, BLACK, "struct task_struct address:%#018lx\n", (unsigned long)tsk);
-    memset(tsk, 0, sizeof(*tsk));
-    memcpy(current, tsk, sizeof(struct task_struct)); // 複製父行程信息
+	memset(tsk,0,sizeof(*tsk));
+	memcpy(current,tsk,sizeof(struct task_struct));
 
-    list_init(&tsk->list);
-    tsk->priority = 2;
-    tsk->pid = global_pid++;
-    tsk->preempt_count = 0;
-    tsk->cpu_id = SMP_cpu_id();
-    tsk->state = TASK_UNINTERRUPTIBLE;
-    tsk->next = init_task_union.task.next;
-    init_task_union.task.next = tsk;
-    tsk->parent = current;
+	list_init(&tsk->list);
+	tsk->priority = 2;
+	tsk->pid = global_pid++;
+	tsk->preempt_count = 0;
+	tsk->cpu_id = SMP_cpu_id();
+	tsk->state = TASK_UNINTERRUPTIBLE;
+	tsk->next = init_task_union.task.next;
+	init_task_union.task.next = tsk;
+	tsk->parent = current;
+	wait_queue_init(&tsk->wait_childexit,NULL);
 
-    retval = -ENOMEM;
+	retval = -ENOMEM;
+//	copy flags
+	if(copy_flags(clone_flags,tsk))
+		goto copy_flags_fail;
 
-    // copy flags
-    if (copy_flags(clone_flags, tsk))
-        goto copy_flags_fail; // 複製失敗釋放資源
+//	copy mm struct
+	if(copy_mm(clone_flags,tsk))
+		goto copy_mm_fail;
 
-    // copy mm struct
-    if (copy_mm(clone_flags, tsk))
-        goto copy_mm_fail;
+//	copy file struct
+	if(copy_files(clone_flags,tsk))
+		goto copy_files_fail;
 
-    // copy file struct
-    if (copy_files(clone_flags, tsk))
-        goto copy_files_fail;
+//	copy thread struct
+	if(copy_thread(clone_flags,stack_start,stack_size,tsk,regs))
+		goto copy_thread_fail;
 
-    // copy thread struct
-    if (copy_thread(clone_flags, stack_start, stack_size, tsk, regs))
-        goto copy_thread_fail;
-    
-    retval = tsk->pid;
-    wakeup_process(tsk);
+	retval = tsk->pid;
+
+	wakeup_process(tsk);
 
 fork_ok:
-    return retval;
+	return retval;
+
 
 copy_thread_fail:
-    exit_thread(tsk);
-
+	exit_thread(tsk);
 copy_files_fail:
-    exit_files(tsk);
-
+	exit_files(tsk);
 copy_mm_fail:
-    exit_mm(tsk);
-
+	exit_mm(tsk);
 copy_flags_fail:
 alloc_copy_task_fail:
-    kfree(tsk);
+	kfree(tsk);
 
-    return retval;
+	return retval;
 }
 
-unsigned long do_exit(unsigned long code)
+void exit_notify()
 {
-    color_printk(RED, BLACK, "exit task is running,arg:%#018lx\n", code);
-    while(1);
+    // 通知父行程
+    wakeup(&current->parent->wait_childexit, TASK_INTERRUPTIBLE);
 }
 
-unsigned long do_execve(struct pt_regs *regs, char *name)
+unsigned long do_exit(unsigned long exit_code)
+{
+    struct task_struct *tsk = current;
+    color_printk(RED, BLACK, "exit task is running,arg:%#018lx\n", exit_code);
+do_exit_again:
+    cli();
+    tsk->state = TASK_ZOMBIE;
+    tsk->exit_code = exit_code;
+    exit_thread(tsk);
+    exit_files(tsk);
+    sti();
+    exit_notify();
+    schedule();
+    goto do_exit_again;
+    return 0;
+}
+
+unsigned long do_execve(struct pt_regs *regs, char *name, char *argv[], char *envp[])
 {
     // 執行此函式後行程將獨立於父行程
     unsigned long code_start_addr = 0x800000;
@@ -406,17 +439,6 @@ unsigned long do_execve(struct pt_regs *regs, char *name)
     struct file *filp = NULL;
     unsigned long retval = 0;
     long pos = 0;
-
-    // 設置用戶態的段寄存器，準備執行用戶態程式
-    regs->ds = USER_DS;
-    regs->es = USER_DS;
-    regs->ss = USER_DS;
-    regs->cs = USER_CS;
-
-    // 設置用戶態程序的指令指針和堆疊指針
-    regs->r10 = 0x800000; // RIP 指向代碼起始地址
-    regs->r11 = 0xa00000; // RSP 指向堆疊起始地址
-    regs->rax = 1;
 
     color_printk(RED, BLACK, "do_execve task is running\n");
 
@@ -463,6 +485,13 @@ unsigned long do_execve(struct pt_regs *regs, char *name)
     __asm__ __volatile__ ("mfence           \n\t"
                           "movq %0, %%cr3   \n\t"
                           ::"r"(current->mm->pgd):"memory");
+    
+    // 開啟並讀取指定的可執行檔案
+    filp = open_exec_file(name);
+
+    if ((unsigned long)filp > -0x1000UL)
+        return (unsigned long)filp;
+
     // 如果當前行程不是核心執行緒，設置其記憶體訪問限制
     if (!(current->flags & PF_KTHREAD))
         current->addr_limit = TASK_SIZE;
@@ -485,21 +514,49 @@ unsigned long do_execve(struct pt_regs *regs, char *name)
     // 清除 PF_VFORK 標誌
     current->flags &= ~PF_VFORK;
 
-    // 開啟並讀取指定的可執行檔案
-    filp = open_exec_file(name);
+    if (argv) {
+        int argc = 0;
+        int len = 0;
+        int i = 0;
+        char **dargv = (char**)(stack_start_addr - 10 * sizeof(char*));
+        pos = (unsigned long)dargv;
+        for (i = 0; i < 10 && argv[i]; i++) {
+            len = strnlen_user(argv[i], 1024) + 1;
+            strcpy((char*)pos - len, argv[i]);
+            dargv[i] = (char*)(pos - len);
+            pos -= len;
+        }
+        stack_start_addr = pos - 10;
+        regs->rdi = i; // argc
+        regs->rsi = (unsigned long)dargv; // argv
+    }
 
-    if ((unsigned long)filp > -0x1000UL)
-        return (unsigned long)filp;
-    
-    
-    memset((void *)0x800000, 0, PAGE_2M_SIZE);
+    memset((void *)code_start_addr, 0, stack_start_addr - code_start_addr);
     // 清空程式碼段
-    // 從可執行檔案中讀取程式碼，載入到記憶體中
-    
+    pos = 0;
+
+    // 從可執行檔案中讀取程式碼，載入到記憶體中  
     retval = filp->f_ops->read(filp,
-                               (void *)0x800000,
+                               (void *)code_start_addr,
                                filp->dentry->dir_inode->file_size,
                                &pos);
+    
+    __asm__	__volatile__ ( "movq %0, %%gs   \n\t"
+                           "movq %0, %%fs   \n\t"
+                           ::"r"(0UL));
+
+    // 設置用戶態的段寄存器，準備執行用戶態程式
+    regs->ds = USER_DS;
+    regs->es = USER_DS;
+    regs->ss = USER_DS;
+    regs->cs = USER_CS;
+
+    // 設置用戶態程序的指令指針和堆疊指針
+    regs->r10 = code_start_addr; // RIP 指向代碼起始地址
+    regs->r11 = stack_start_addr; // RSP 指向堆疊起始地址
+    regs->rax = 1;
+    
+    color_printk(RED, BLACK, "do_execve task is running\n");
     return retval;
 }
 
@@ -519,12 +576,14 @@ int kernel_thread(unsigned long (*fn)(unsigned long), unsigned long arg, unsigne
     return do_fork(&regs, flags | CLONE_VM, 0, 0);
 }
 
-void switch_mm(struct task_struct *prev,struct task_struct *next)
+inline void switch_mm(struct task_struct *prev,struct task_struct *next)
 {
     __asm__ __volatile__ ("movq %0, %%cr3   \n\t"::"r"(next->mm->pgd):"memory");
 }
 
-void __switch_to(struct task_struct *prev, struct task_struct *next)
+void __switch_to(struct task_struct *prev, struct task_struct *next);
+
+inline void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
     // process會共用同一個TSS，1個處理器具有1個TSS，這些TSS由全局變數init_tss數組管理。
     init_tss[SMP_cpu_id()].rsp0 = next->thread->rsp0;

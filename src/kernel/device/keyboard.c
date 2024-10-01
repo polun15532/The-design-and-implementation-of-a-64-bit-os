@@ -1,163 +1,44 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #include "keyboard.h"
 #include "lib.h"
 #include "interrupt.h"
 #include "APIC.h"
 #include "memory.h"
 #include "printk.h"
+#include "VFS.h"
+#include "waitqueue.h"
 
 struct keyboard_inputbuffer *p_kb = NULL;
-static int shift_l, shift_r, ctrl_l, ctrl_r,alt_l, alt_r;
+wait_queue_t keyboard_wait_queue;
 
 void keyboard_handler(unsigned long nr, unsigned long parameter, struct pt_regs *regs)
 {
     unsigned char x;
     x = io_in8(0x60); // 讀取鍵盤掃描碼
-    color_printk(WHITE, BLACK, "(K:%02x)", x); // 打印讀取到的掃描碼
+    // color_printk(WHITE, BLACK, "(K:%02x)", x); // 打印讀取到的掃描碼
 
-     if (p_kb->p_head == p_kb->buf + KB_BUF_SIZE)
+    if (p_kb->p_head == p_kb->buf + KB_BUF_SIZE)
         p_kb->p_head = p_kb->buf; // 到緩衝區尾部回到起始位置
 
     *p_kb->p_head = x;
     p_kb->count++;
     p_kb->p_head++;
+    wakeup(&keyboard_wait_queue, TASK_UNINTERRUPTIBLE);
 }
-
-unsigned char get_scancode()
-{
-    unsigned char ret  = 0;
-
-     if (p_kb->count == 0)
-        while(!p_kb->count)
-            nop();
-    
-     if (p_kb->p_tail == p_kb->buf + KB_BUF_SIZE)
-        p_kb->p_tail = p_kb->buf;
-
-    ret = *p_kb->p_tail;
-    p_kb->count--;
-    p_kb->p_tail++;
-
-    return ret;
-}
-
-void analysis_keycode()
-{
-    unsigned char x = 0;
-    int i;
-    int key = 0;
-    int make = 0;
-
-    x = get_scancode(); // 從緩衝區取得鍵盤掃描碼。
-    
-    if (x == 0xE1) { //pause break;
-        key = PAUSEBREAK;
-        for (i = 1; i < 6; i++) {
-             if (get_scancode() != pausebreak_scode[i]) {
-                key = 0;
-                break;
-            }
-        }
-    } else if (x == 0xE0) {  //print screen
-        x = get_scancode();
-
-        switch (x) {
-            case 0x2A: // press printscreen
-        
-                if (get_scancode() == 0xE0) {
-                    if (get_scancode() == 0x37) {
-                        key = PRINTSCREEN;
-                        make = 1;
-                    }
-                }
-                break;
-
-            case 0xB7: // UNpress printscreen
-        
-                if (get_scancode() == 0xE0) {
-                    if (get_scancode() == 0xAA) {
-                        key = PRINTSCREEN;
-                        make = 0;
-                    }
-                }
-                break;
-
-            case 0x1d: // press right ctrl
-        
-                ctrl_r = 1;
-                key = OTHERKEY;
-                break;
-
-            case 0x9d: // UNpress right ctrl
-        
-                ctrl_r = 0;
-                key = OTHERKEY;
-                break;
-            
-            case 0x38: // press right alt
-        
-                alt_r = 1;
-                key = OTHERKEY;
-                break;
-
-            case 0xb8: // UNpress right alt
-        
-                alt_r = 0;
-                key = OTHERKEY;
-                break;
-            default:
-                key = OTHERKEY;
-                break;
-        }
-    }
-
-
-    if (key == 0) {
-        unsigned int * keyrow = NULL;
-        int column = 0;
-
-        // make = x & FLAG_BREAK ? 0 : 1;
-        make = !(x & FLAG_BREAK);
-
-        keyrow = &keycode_map_normal[(x & 0x7F) * MAP_COLS];
-
-         if (shift_l || shift_r)
-            column = 1;
-
-        key = keyrow[column];
-        
-        switch (x & 0x7F) {
-            case 0x2a: //SHIFT_L:
-                shift_l = make;
-                key = 0;
-                break;
-
-            case 0x36: //SHIFT_R:
-                shift_r = make;
-                key = 0;
-                break;
-
-            case 0x1d: //CTRL_L:
-                ctrl_l = make;
-                key = 0;
-                break;
-
-            case 0x38: //ALT_L:
-                alt_l = make;
-                key = 0;
-                break;
-
-            default:
-                 if (!make)
-                    key = 0;
-                break;
-        }
-
-         if (key)
-            color_printk(RED,BLACK,"(K:%c)\t",key);
-    }
-}
-
-
 
 hw_int_controller keyboard_int_controller = 
 {
@@ -177,9 +58,10 @@ void keyboard_exit()
 void keyboard_init()
 {
     struct IO_APIC_RET_entry entry;
-    unsigned long i, j;
+    unsigned long i;
 
-    p_kb = (struct keyboard_inputbuffer *) kmalloc(sizeof(struct keyboard_inputbuffer), 0);
+    wait_queue_init(&keyboard_wait_queue, NULL);
+    p_kb = (struct keyboard_inputbuffer*) kmalloc(sizeof(struct keyboard_inputbuffer), 0);
 
     p_kb->p_head = p_kb->buf;
     p_kb->p_tail = p_kb->buf;
@@ -206,16 +88,82 @@ void keyboard_init()
     wait_KB_write();
     io_out8(PORT_KB_DATA, KB_INIT_MODE);
 
-    for (i = 0; i < 1000; i++)
-        for (j = 0; j < 1000; j++)
-            nop();
-    
-    shift_l = 0;
-    shift_r = 0;
-    ctrl_l  = 0;
-    ctrl_r  = 0;
-    alt_l   = 0;
-    alt_r   = 0;
+    for (i = 0; i < 1000000; i++)
+        nop();
 
     register_irq(0x21, &entry, &keyboard_handler, (unsigned long)p_kb, &keyboard_int_controller, "ps/2 keyboard");
 }
+
+long keyboard_open(struct index_node *inode, struct file *filp)
+{
+    filp->private_data = p_kb;
+    p_kb->p_head = p_kb->buf;
+    p_kb->p_tail = p_kb->buf;
+    p_kb->count = 0;
+    memset(p_kb->buf, 0, KB_BUF_SIZE);
+    return 1;
+}
+
+long keyboard_close(struct index_node *inode, struct file *filp)
+{
+    filp->private_data = NULL;
+    p_kb->p_head = p_kb->buf;
+    p_kb->p_tail = p_kb->buf;
+    p_kb->count = 0;
+    memset(p_kb->buf, 0, KB_BUF_SIZE);
+    return 1;
+}
+
+#define KEY_CMD_RESET_BUFFER    0
+
+long keyboard_ioctl(struct index_node *inode,
+                    struct file *filp,
+                    unsigned long cmd,
+                    unsigned long arg)
+{
+    switch (cmd) {
+        case KEY_CMD_RESET_BUFFER:
+            p_kb->p_head = p_kb->buf;
+            p_kb->p_tail = p_kb->buf;
+            p_kb->count = 0;
+            memset(p_kb->buf, 0, KB_BUF_SIZE);
+            break;
+
+        default:
+            break;
+    }
+    return 0;
+}
+
+long keyboard_read(struct file *filp, char *buf, unsigned long count, long *position)
+{
+    long counter = 0;
+    unsigned char *tail = NULL;
+    if (p_kb->count == 0)
+        sleep_on(&keyboard_wait_queue); // 避免鍵盤傳遞數據時行程浪費CPU資源
+    counter = p_kb->count >= count ? count : p_kb->count;
+    tail = p_kb->p_tail;
+    if (counter <= (p_kb->buf + KB_BUF_SIZE - tail))
+    {
+        copy_to_user(tail, buf, counter);
+        p_kb->p_tail += counter;
+    } else {
+        copy_to_user(tail, buf, (p_kb->buf + KB_BUF_SIZE - tail));
+        copy_to_user(p_kb->p_head, buf,counter - (p_kb->buf + KB_BUF_SIZE - tail));
+        p_kb->p_tail = p_kb->p_head + (counter - (p_kb->buf + KB_BUF_SIZE - tail));    
+    }
+    p_kb->count -= counter;
+}
+
+long keyboard_write(struct file *filp, char *buf, unsigned long count, long *position)
+{
+    return 0;
+}
+
+struct file_operations keyboard_fops = {
+    .open   = keyboard_open,
+    .close  = keyboard_close,
+    .ioctl  = keyboard_ioctl,
+    .read   = keyboard_read,
+    .write  = keyboard_write
+};

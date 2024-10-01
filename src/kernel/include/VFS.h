@@ -1,3 +1,18 @@
+/***************************************************
+*		版权声明
+*
+*	本操作系统名为：MINE
+*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
+*	只允许个人学习以及公开交流使用
+*
+*	代码最终所有权及解释权归田宇所有；
+*
+*	本模块作者：	田宇
+*	EMail:		345538255@qq.com
+*
+*
+***************************************************/
+
 #ifndef __VFS_H__
 #define __VFS_H__
 
@@ -57,8 +72,9 @@ struct index_node {
     void *private_index_info;
 };
 
-#define FS_ATTR_FILE (1UL << 0)
-#define FS_ATTR_DIR (1UL << 1)
+#define FS_ATTR_FILE    (1UL << 0)
+#define FS_ATTR_DIR     (1UL << 1)
+#define FS_ATTR_DEVICE  (1UL << 2)
 
 struct dir_entry {
     char *name;
@@ -106,6 +122,8 @@ struct dir_entry_operations {
     long (*iput)(struct dir_entry *dentry, struct index_node *inode);
 };
 
+typedef int (*filldir_t)(void *buf, char *name, long name_len, long type, long offset);
+
 struct file_operations {
     long (*open)(struct index_node *inode, struct file *filp);
     long (*close)(struct index_node *inode, struct file *filp);
@@ -113,6 +131,7 @@ struct file_operations {
     long (*write)(struct file *filp, char *buf, unsigned long count, long *position);
     long (*lseek)(struct file *filp, long offset, int origin);
     long (*ioctl)(struct index_node *inode, struct file *filp, unsigned long cmd, unsigned long arg);
+    long (*readdir)(struct file *filp, void *dirent, filldir_t filler);
 };
 
 struct dir_entry *path_walk(char *name, unsigned long flags);
