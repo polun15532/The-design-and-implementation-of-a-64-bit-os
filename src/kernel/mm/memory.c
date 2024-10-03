@@ -88,9 +88,11 @@ void init_memory()
     struct E820 *p = NULL;	
     
     // color_printk(RED,BLACK,"Display Physics Address MAP,Type(1:RAM,2:ROM or Reserved,3:ACPI Reclaim Memory,4:ACPI NVS Memory,Others:Undefine)\n");
-    p = (struct E820 *)0xffff800000007e00;
+    p = (struct E820*)0xffff800000007e00;
 
-    for (i = 0; i < 32; i++) {
+    for (i = 0; i < 32; i++, p++) {
+        if (p->type > 4 || p->length == 0 || p->type < 1)
+            break;
         // color_printk(ORANGE,BLACK, "Address:%#018lx\tLength:%#018lx\tType:%#010x\n", p->address, p->length, p->type);
         unsigned long tmp = 0;
         if (p->type == 1)
@@ -100,10 +102,6 @@ void init_memory()
         memory_management_struct.e820[i].length	 = p->length;
         memory_management_struct.e820[i].type	 = p->type;
         memory_management_struct.e820_length     = i;
-
-        p++;
-        if (p->type > 4 || p->length == 0 || p->type < 1)
-            break;
     }
 
     // color_printk(ORANGE, BLACK, "OS Can Used Total RAM:%#018lx\n", TotalMem);
@@ -115,7 +113,10 @@ void init_memory()
         if (memory_management_struct.e820[i].type != 1)
             continue;
         start = PAGE_2M_ALIGN(memory_management_struct.e820[i].address);
-        end   = (memory_management_struct.e820[i].address + memory_management_struct.e820[i].length) & PAGE_2M_MASK;
+        end   = (memory_management_struct.e820[i].address +
+                memory_management_struct.e820[i].length) &
+                PAGE_2M_MASK;
+
         if (end <= start)
             continue;
         TotalMem += (end - start) >> PAGE_2M_SHIFT;

@@ -45,6 +45,11 @@ extern char _end;
 
 extern unsigned long _stack_start;
 
+extern unsigned long kallsyms_addresses[] __attribute__((weak));
+extern long kallsyms_syms_num __attribute__((weak));
+extern long kallsyms_index[] __attribute__((weak));
+extern char *kallsyms_names[] __attribute__((weak));
+
 #define TASK_RUNNING		    (1 << 0)
 #define TASK_INTERRUPTIBLE	    (1 << 1)
 #define	TASK_UNINTERRUPTIBLE	(1 << 2)

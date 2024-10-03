@@ -18,6 +18,7 @@ void *malloc(unsigned long size)
         printf("malloc size <= 0\n");
         return NULL;
     }
+
     if (brk_start_address == 0)
         brk_start_address = brk_used_address = brk_end_address = brk(0); // 返回 heap 起始地址
 

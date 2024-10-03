@@ -3,7 +3,7 @@
 # 獲取當前工作目錄的絕對路徑
 BASEDIR=$(pwd)
 
-# 編譯 bootloader, kernel, 和 user
+# 編譯 bootloader、kernel、Kallsyms、user與test
 echo "Compiling bootloader..."
 make -C "$BASEDIR/src/bootloader" || { echo "Bootloader compilation failed"; exit 1; }
 echo "Compiling kernel..."
@@ -16,13 +16,13 @@ make -C "$BASEDIR/src/test" || { echo "TestUser program compilation failed"; exi
 echo "Creating boot image..."
 sudo dd if="$BASEDIR/src/bootloader/boot.bin" of="$BASEDIR/boot.img" bs=512 count=1 conv=notrunc || { echo "Failed to create boot image"; exit 1; }
 
-# 確保掛載點 /media 是空的並且存在
+# 確保掛載點 /media 為空
 if mount | grep /media; then
     echo "/media is already mounted, attempting to unmount"
     sudo umount /media || { echo "Failed to unmount /media"; exit 1; }
 fi
 
-# 挂載 boot.img 到 /media 並複製必要的文件
+# 挂載 boot.img 到 /media 
 echo "Mounting boot.img to /media..."
 sudo mount "$BASEDIR/boot.img" /media/ -t vfat -o loop || { echo "Failed to mount boot image"; exit 1; }
 

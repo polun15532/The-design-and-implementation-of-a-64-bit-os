@@ -20,35 +20,56 @@
 #include "lib.h"
 #include "printk.h"
 
-void sys_vector_init()
+int lookup_kallsyms(unsigned long address, int level)
 {
-    set_trap_gate(0, 1, divide_error);
-    set_trap_gate(1, 1, debug);
-    set_intr_gate(2, 1, nmi);
-    set_system_gate(3, 1, int3);
-    set_system_gate(4, 1, overflow);
-    set_system_gate(5, 1, bounds);
-    set_trap_gate(6, 1, undefined_opcode);
-    set_trap_gate(7, 1, dev_not_available);
-    set_trap_gate(8, 1, double_fault);
-    set_trap_gate(9, 1, coprocessor_segment_overrun);
-    set_trap_gate(10, 1, invalid_TSS);
-    set_trap_gate(11, 1, segment_not_present);
-    set_trap_gate(12, 1, stack_segment_fault);
-    set_trap_gate(13, 1, general_protection);
-    set_trap_gate(14, 1, page_fault);
-    //15 Intel reserved. Do not use.
-    set_trap_gate(16, 1, x87_FPU_error);
-    set_trap_gate(17, 1, alignment_check);
-    set_trap_gate(18, 1, machine_check);
-    set_trap_gate(19, 1, SIMD_exception);
-    set_trap_gate(20, 1, virtualization_exception);
+    int index = 0;
+    int level_index = 0;
+    char *string = (char*) &kallsyms_names;
+    for (index = 0; index < kallsyms_syms_num; index++) {
+        if(address > kallsyms_addresses[index] && address <= kallsyms_addresses[index + 1])
+            break;  
+    }
+
+    if (index < kallsyms_syms_num) {
+        for(level_index = 0; level_index < level; level_index++)
+            color_printk(RED, BLACK, "  ");
+        color_printk(RED, BLACK, "+---> ");
+
+        color_printk(RED,
+                     BLACK,
+                     "address:%#018lx \t(+) %04d function:%s\n",
+                     address,
+                     address - kallsyms_addresses[index],
+                     &string[kallsyms_index[index]]);
+        return 0;
+    }
+    return 1;    
+}
+
+
+void backtrace(struct pt_regs *regs)
+{
+    unsigned long *rbp = (unsigned long*)regs->rbp;
+    unsigned long ret_address = regs->rip;
+    int i = 0;
+    color_printk(RED, BLACK, "====================== Kernel Stack Backtrace ======================\n");
+
+    for (i = 0; i < 10; i++) {
+        if (lookup_kallsyms(ret_address, i))
+            break;
+
+        if((unsigned long)rbp < regs->rsp || (unsigned long)rbp > current->thread->rsp0)
+            break;
+        ret_address = *(rbp+1);
+        rbp = (unsigned long*)*rbp;
+    }
 }
 
 void display_regs(struct pt_regs *regs)
 {
     // 打印各暫存器的信息。
-	color_printk(RED,
+
+    color_printk(RED,
                  BLACK,
                  "CS:%#010x,SS:%#010x\nDS:%#010x,ES:%#010x\nRFLAGS:%#018lx\n",
                  regs->cs,
@@ -57,7 +78,7 @@ void display_regs(struct pt_regs *regs)
                  regs->es,
                  regs->rflags);
 
-	color_printk(RED,
+    color_printk(RED,
                  BLACK,
                  "RAX:%#018lx,RBX:%#018lx,RCX:%#018lx,RDX:%#018lx\nRSP:%#018lx,RBP:%#018lx,RIP:%#018lx\nRSI:%#018lx,RDI:%#018lx\n",
                  regs->rax,
@@ -70,7 +91,7 @@ void display_regs(struct pt_regs *regs)
                  regs->rsi,
                  regs->rdi);
 
-	color_printk(RED,
+    color_printk(RED,
                  BLACK,
                  "R8 :%#018lx,R9 :%#018lx\nR10:%#018lx,R11:%#018lx\nR12:%#018lx,R13:%#018lx\nR14:%#018lx,R15:%#018lx\n",
                  regs->r8,
@@ -81,6 +102,8 @@ void display_regs(struct pt_regs *regs)
                  regs->r13,
                  regs->r14,
                  regs->r15);
+
+    backtrace(regs);
 }
 
 
@@ -267,6 +290,7 @@ void do_general_protection(struct pt_regs *regs, unsigned long error_code)
 
 void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
+
     unsigned long cr2 = 0;
     __asm__	__volatile__("movq	%%cr2,	%0":"=r"(cr2)::"memory"); // 將cr2暫存器的值放入變數cr2中
 
@@ -339,4 +363,29 @@ void do_virtualization_exception(struct pt_regs *regs, unsigned long error_code)
     display_regs(regs);
     while (1)
         hlt();
+}
+
+void sys_vector_init()
+{
+    set_trap_gate(0, 0, divide_error);
+    set_trap_gate(1, 0, debug);
+    set_intr_gate(2, 0, nmi);
+    set_system_gate(3, 0, int3);
+    set_system_gate(4, 0, overflow);
+    set_system_gate(5, 0, bounds);
+    set_trap_gate(6, 0, undefined_opcode);
+    set_trap_gate(7, 0, dev_not_available);
+    set_trap_gate(8, 0, double_fault);
+    set_trap_gate(9, 0, coprocessor_segment_overrun);
+    set_trap_gate(10, 0, invalid_TSS);
+    set_trap_gate(11, 0, segment_not_present);
+    set_trap_gate(12, 0, stack_segment_fault);
+    set_trap_gate(13, 0, general_protection);
+    set_trap_gate(14, 0, page_fault);
+    //15 Intel reserved. Do not use.
+    set_trap_gate(16, 0, x87_FPU_error);
+    set_trap_gate(17, 0, alignment_check);
+    set_trap_gate(18, 0, machine_check);
+    set_trap_gate(19, 0, SIMD_exception);
+    set_trap_gate(20, 0, virtualization_exception);
 }

@@ -115,7 +115,7 @@ void Start_Kernel(void)
     icr_entry.dest_shorthand = ICR_ALL_EXCLUDE_Self;
     icr_entry.reserved3 = 0;
     icr_entry.dest_field.x2APIC = 0;
-    wrmsr(0x830, *(unsigned long *)&icr_entry);	//INIT IPI
+    wrmsr(0x830, *(unsigned long*)&icr_entry);	//INIT IPI
     // 0x830為ICR暫存器的MSR地址。
     
     for (global_i = 0; global_i < 0;) {
@@ -149,16 +149,16 @@ void Start_Kernel(void)
         icr_entry.deliver_mode = ICR_Start_up;
         icr_entry.dest_shorthand = ICR_No_Shorthand; // 當速記值為0時才會從dest_field檢索目標處理器。
         icr_entry.dest_field.x2APIC = global_i;
-        wrmsr(0x830, *(unsigned long *)&icr_entry); // Start-up IPI
-        wrmsr(0x830, *(unsigned long *)&icr_entry);
+        wrmsr(0x830, *(unsigned long*)&icr_entry); // Start-up IPI
+        wrmsr(0x830, *(unsigned long*)&icr_entry);
     }
 
     icr_entry.vector = 0xc8; // 定義中斷向量號。
     icr_entry.dest_field.x2APIC = 1; // 設定目標處理器為1。
     icr_entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
-    wrmsr(0x830, *(unsigned long *)&icr_entry);
+    wrmsr(0x830, *(unsigned long*)&icr_entry);
     icr_entry.vector = 0xc9;
-    wrmsr(0x830, *(unsigned long *)&icr_entry);
+    wrmsr(0x830, *(unsigned long*)&icr_entry);
 
     color_printk(RED, BLACK,"Timer init \n");
     timer_init();

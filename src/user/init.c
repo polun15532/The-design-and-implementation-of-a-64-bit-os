@@ -172,7 +172,6 @@ int ls_command(int argc, char **argv)
 {
     struct DIR *dir = NULL;
     struct dirent *buf = NULL;
-
     dir = opendir(current_dir);
     printf("ls_command opendir:%d\n", dir->fd);
     buf = (struct dirent*)malloc(256);
