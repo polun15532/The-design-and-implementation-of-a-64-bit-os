@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "softirq.h"
 #include "lib.h"
 #include "printk.h"
@@ -42,9 +27,8 @@ void unregister_softirq(int nr)
 // 離開中斷時調用(entry.S中宣告)
 void do_softirq()
 {
-    int i;
     sti();
-    for (i = 0; i < 64 && softirq_status; i++) {
+    for (int i = 0; i < 64 && softirq_status; i++) {
         if(softirq_status & (1 << i)) {
             softirq_vector[i].action(softirq_vector[i].data);
             softirq_status &= ~(1 << i);
@@ -56,5 +40,5 @@ void do_softirq()
 void softirq_init()
 {
     softirq_status = 0;
-    memset(softirq_vector, 0, sizeof(struct softirq) * 64);
+    memset(softirq_vector, 0, sizeof(softirq_vector));
 }

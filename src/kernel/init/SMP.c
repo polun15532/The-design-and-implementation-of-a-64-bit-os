@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "SMP.h"
 #include "cpu.h"
 #include "printk.h"
@@ -28,21 +13,22 @@ spinlock_t SMP_lock;
 
 void IPI_0x200(unsigned long nr, unsigned long parameter, struct pt_regs *regs)
 {
-    switch(current->priority) {
+    struct task_struct *current_tsk = current;
+    int cpu_id = current_tsk->cpu_id;
+    switch(current_tsk->priority) {
         case 0:
         case 1:
-            task_schedule[SMP_cpu_id()].CPU_exec_task_jiffies--;
-            current->vrun_time++;
+            task_schedule[cpu_id].CPU_exec_task_jiffies--;
+            current_tsk->vrun_time++;
             break;
         case 2:
         default:
-            task_schedule[SMP_cpu_id()].CPU_exec_task_jiffies -= 2;
-            current->vrun_time += 2;
+            task_schedule[cpu_id].CPU_exec_task_jiffies -= 2;
+            current_tsk->vrun_time += 2;
             break;
     }
 
-    if (task_schedule[SMP_cpu_id()].CPU_exec_task_jiffies <= 0)
-        current->flags |= NEED_SCHEDULE;
+    if (task_schedule[cpu_id].CPU_exec_task_jiffies <= 0) current_tsk->flags |= NEED_SCHEDULE;
 }
 
 void SMP_init()
@@ -57,6 +43,7 @@ void SMP_init()
     }
     color_printk(WHITE, BLACK, "x2APIC ID level:%#010x\tx2APIC ID the current logical processor:%#010x\n", c & 0xff, d);
     color_printk(WHITE, BLACK, "SMP copy byte:%#010x\n", (unsigned long)&_APU_boot_end - (unsigned long)&_APU_boot_start);
+    
     memcpy(_APU_boot_start, (unsigned char *)0xffff800000020000, (unsigned long)&_APU_boot_end - (unsigned long)&_APU_boot_start);
     spin_init(&SMP_lock);
 
@@ -72,7 +59,9 @@ void Start_SMP()
 
     unsigned int x, y;
     color_printk(RED, YELLOW, "APU starting......\n");
+
     // 以下程式碼來自APIC.c的Local_APIC_init初使化函式。
+
     __asm__ __volatile__( "movq $0x1b, %%rcx \n\t"
                         "rdmsr             \n\t"
                         "bts $10,   %%rax  \n\t"
@@ -84,8 +73,7 @@ void Start_SMP()
                         :
                         :"memory");
 
-    if (x & 0xc00)
-        color_printk(WHITE, BLACK, "xAPIC & x2APIC enabled\n");
+    if (x & 0xc00) color_printk(WHITE, BLACK, "xAPIC & x2APIC enabled\n");
 
     __asm__ __volatile__( "movq $0x80f, %%rcx \n\t"
                           "rdmsr              \n\t"
@@ -96,39 +84,44 @@ void Start_SMP()
                           :"=a"(x), "=d"(y)
                           :
                           :"memory");
-    if(x & 0x100)
-        color_printk(WHITE, BLACK, "SVR[8] enabled\n");
+    if(x & 0x100) color_printk(WHITE, BLACK, "SVR[8] enabled\n");
     // get local APIC ID
     __asm__ __volatile__( "movq $0x802, %%rcx \n\t"
                           "rdmsr              \n\t"
                           :"=a"(x), "=d"(y)
                           :
                           :"memory");
+
     color_printk(RED, YELLOW, "x2APIC ID:%#010x\n", x);
 
-    current->state = TASK_RUNNING;
-    current->flags = PF_KTHREAD;
-    current->mm = &init_mm;
+    
+    struct task_struct *current_tsk = current;
+    *current_tsk = (struct task_struct) {
+        .state = TASK_RUNNING,
+        .flags = PF_KTHREAD,
+        .mm = &init_mm,
+        .addr_limit = 0xffff800000000000,
+        .priority = 2,
+        .vrun_time = 0,
+        .thread = (struct thread_struct*)(current + 1)
+    };
 
-    list_init(&current->list);
-    current->addr_limit = 0xffff800000000000;
-    current->priority = 2;
-    current->vrun_time = 0;
+    list_init(&current_tsk->list);
 
-    current->thread = (struct thread_struct*)(current + 1);
-    memset(current->thread, 0, sizeof(struct thread_struct));
+    *current_tsk->thread = (struct thread_struct) {
+        .rsp0 = _stack_start,
+        .rsp = _stack_start,
+        .fs = KERNEL_DS,
+        .gs = KERNEL_DS,
+    };
 
-    current->thread->rsp0 = _stack_start;
-    current->thread->rsp = _stack_start;
-    current->thread->fs = KERNEL_DS;
-    current->thread->gs = KERNEL_DS;
-    init_task[SMP_cpu_id()] = current;
+    init_task[current_tsk->cpu_id] = current_tsk;
 
     load_TR(10 + global_i * 2);
+
     spin_unlock(&SMP_lock);
 
-    current->preempt_count = 0;  // 歸零
+    current_tsk->preempt_count = 0;  // 歸零
 
-    while(1)
-        hlt();
+    while (1) hlt();
 }

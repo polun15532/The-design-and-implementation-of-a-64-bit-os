@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "printk.h"
 #include "gate.h"
 #include "trap.h"
@@ -32,20 +17,21 @@
 
 void Start_Kernel(void)
 {
-    struct ICR_REG_entry icr_entry = {0};
     unsigned char *ptr = NULL;
 
-    Pos.XResolution = 1440;
-    Pos.YResolution = 900;
-    Pos.XPosition = 0;
-    Pos.YPosition = 0;
-    Pos.XCharSize = 8;	// 字符寬為8像素點
-    Pos.YCharSize = 16; // 字符寬為16像素點
-
-    Pos.FB_addr = (int *)0xffff800003000000; // frame buffer的地址
-    Pos.FB_length = (Pos.XResolution * Pos.YResolution * 4 + PAGE_4K_SIZE - 1) & PAGE_4K_MASK; //每個像素點需要32位元表示
+    Pos = (struct position) {
+        Pos.XResolution = 1440,
+        Pos.YResolution = 900,
+        Pos.XPosition = 0,
+        Pos.YPosition = 0,
+        Pos.XCharSize = 8,	// 字符寬為8像素點
+        Pos.YCharSize = 16, // 字符寬為16像素點
+        Pos.FB_addr = (int *)0xffff800003000000, // frame buffer的地址
+        Pos.FB_length = (Pos.XResolution * Pos.YResolution * 4 + PAGE_4K_SIZE - 1) & PAGE_4K_MASK, //每個像素點需要32位元表示
+    };
 
     spin_init(&Pos.printk_lock);
+
     load_TR(10);
     set_tss64((unsigned int*)&init_tss[0], _stack_start, _stack_start, _stack_start, 
              0xffff800000007c00, 0xffff800000007c00, 0xffff800000007c00,
@@ -54,12 +40,13 @@ void Start_Kernel(void)
     sys_vector_init();
 
     init_cpu();
-
-    memory_management_struct.start_code = (unsigned long)& _text;
-    memory_management_struct.end_code   = (unsigned long)& _etext;
-    memory_management_struct.end_data   = (unsigned long)& _edata;
-    memory_management_struct.end_rodata = (unsigned long)& _erodata;
-    memory_management_struct.start_brk  = (unsigned long)& _end;
+    memory_management_struct = (struct Global_Memory_Descriptor){
+        .start_code = (unsigned long)& _text,
+        .end_code   = (unsigned long)& _etext,
+        .end_data   = (unsigned long)& _edata,
+        .end_rodata = (unsigned long)& _erodata,
+        .start_brk  = (unsigned long)& _end,
+    };
 
     color_printk(RED, BLACK, "memory init \n");
     init_memory();
@@ -104,17 +91,20 @@ void Start_Kernel(void)
 
     SMP_init();
 
-    icr_entry.vector = 0;
-    icr_entry.deliver_mode = APIC_ICR_IOAPIC_INIT;
-    icr_entry.dest_mode = ICR_IOAPIC_DELV_PHYSICAL;
-    icr_entry.deliver_state = 0;
-    icr_entry.reserved1 = 0;
-    icr_entry.level = ICR_LEVEL_DE_ASSERT; // 這裡切換成de-assert的INIT投遞模式
-    icr_entry.trigger = APIC_ICR_IOAPIC_Edge;
-    icr_entry.reserved2 = 0;
-    icr_entry.dest_shorthand = ICR_ALL_EXCLUDE_Self;
-    icr_entry.reserved3 = 0;
-    icr_entry.dest_field.x2APIC = 0;
+    struct ICR_REG_entry icr_entry = {
+        .vector = 0,
+        .deliver_mode = APIC_ICR_IOAPIC_INIT,
+        .dest_mode = ICR_IOAPIC_DELV_PHYSICAL,
+        .deliver_state = 0,
+        .reserved1 = 0,
+        .level = ICR_LEVEL_DE_ASSERT, // 這裡切換成de-assert的INIT投遞模式
+        .trigger = APIC_ICR_IOAPIC_Edge,
+        .reserved2 = 0,
+        .dest_shorthand = ICR_ALL_EXCLUDE_Self,
+        .reserved3 = 0,
+        .dest_field.x2APIC = 0,
+    };
+
     wrmsr(0x830, *(unsigned long*)&icr_entry);	//INIT IPI
     // 0x830為ICR暫存器的MSR地址。
     
@@ -156,8 +146,11 @@ void Start_Kernel(void)
     icr_entry.vector = 0xc8; // 定義中斷向量號。
     icr_entry.dest_field.x2APIC = 1; // 設定目標處理器為1。
     icr_entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
+
     wrmsr(0x830, *(unsigned long*)&icr_entry);
+    
     icr_entry.vector = 0xc9;
+    
     wrmsr(0x830, *(unsigned long*)&icr_entry);
 
     color_printk(RED, BLACK,"Timer init \n");
@@ -172,7 +165,6 @@ void Start_Kernel(void)
     sti();
 
     while (1) {
-        if(p_mouse->count)
-            analysis_mousecode();
+        if(p_mouse->count) analysis_mousecode();
     }
 }

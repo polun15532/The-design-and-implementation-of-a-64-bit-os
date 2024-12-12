@@ -56,3 +56,8 @@ make -C "$BASEDIR/src/user" clean || { echo "Failed to clean user"; exit 1; }
 make -C "$BASEDIR/src/test" clean || { echo "Failed to clean test"; exit 1; }
 
 echo "Process completed successfully."
+
+echo "Starting Bochs..."
+cd ~/bochs/
+bochs -q
+cd ~/64-bit-operating-system/

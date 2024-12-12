@@ -96,9 +96,10 @@ struct E820 {
 }__attribute__((packed));
 
 // 這是因為結構體以8 byte為單位對齊，所以要增加屬性packed，保證結構體是緊湊的。
-
+#define E820_MAX_ENTRY  32
+#define RAM_TYPE        1
 struct Global_Memory_Descriptor{
-    struct E820     e820[32];
+    struct E820     e820[E820_MAX_ENTRY];
     unsigned long   e820_length;
     unsigned long   *bits_map; // 物理地址空間頁映射位圖
     unsigned long   bits_size; // 物理地址空間的頁數量
@@ -177,12 +178,9 @@ struct Slab {
     struct Page *page;
     unsigned long using_count;
     unsigned long free_count;
-
     void *Vaddress;
-
     unsigned long color_length;
     unsigned long color_count;
-
     unsigned long *color_map;
 };
 
@@ -203,6 +201,7 @@ extern struct Slab_cache kmalloc_cache_size[16];
 
 #define	flush_tlb_one(addr) \
     __asm__ __volatile__    ("invlpg    (%0)    \n\t"::"r"(addr):"memory")
+// 無效化指定地址的 TLB
 
 #define flush_tlb()                         \
 do {                                        \
@@ -215,6 +214,7 @@ do {                                        \
                 :"memory"                   \
                 );                          \
 }while(0)
+// 每次修改 cr3 將強制刷新 TLB
 
 static inline unsigned long *Get_gdt()
 {

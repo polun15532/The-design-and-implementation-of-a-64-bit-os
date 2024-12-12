@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "schedule.h"
 #include "lib.h"
 #include "task.h"
@@ -23,8 +8,8 @@
 void insert_task_queue(struct task_struct *tsk)
 {
     long cpu_id = SMP_cpu_id(); 
-    if (tsk == &init_task_union.task)
-        return;
+    if (tsk == &init_task_union.task) return;
+
     struct task_struct *tmp = container_of(list_next(&task_schedule[cpu_id].task_queue.list), struct task_struct, list);
     
     if (!list_is_empty(&task_schedule[cpu_id].task_queue.list)) {
@@ -44,6 +29,7 @@ struct task_struct *get_next_task()
 
     if (list_is_empty(&task_schedule[cpu_id].task_queue.list))
         return &init_task_union.task; // 所有任務都執行完
+
     tsk = container_of(list_next(&task_schedule[cpu_id].task_queue.list), struct task_struct, list);
     list_del(&tsk->list);
     task_schedule[cpu_id].running_task_count -= 1;
@@ -52,14 +38,13 @@ struct task_struct *get_next_task()
 
 void schedule_init()
 {
-    int i;
-    memset(task_schedule, 0, sizeof(struct schedule) * NR_CPUS);
-
-    for (i = 0; i < NR_CPUS; i++) {
+    for (int i = 0; i < NR_CPUS; i++) {
+        task_schedule[i] = (struct schedule) {
+            .running_task_count = 1,
+            .CPU_exec_task_jiffies = 40,
+        };
         list_init(&task_schedule[i].task_queue.list);
         task_schedule[i].task_queue.vrun_time = 0x7fffffffffffffff;
-        task_schedule[i].running_task_count = 1;
-        task_schedule[i].CPU_exec_task_jiffies = 40;
     }
 }
 

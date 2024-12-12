@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #ifndef __TASK_H__
 #define __TASK_H__
 
@@ -84,24 +69,19 @@ struct thread_struct {
 #define TASK_FILE_MAX   10
 
 struct task_struct {
-
     volatile long state;
     unsigned long flags;
     long preempt_count;
     long signal;
     long cpu_id;
-
     struct mm_struct *mm;
     struct thread_struct *thread;
     struct List list;
-
-    unsigned long addr_limit;   /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/
-                                /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+    unsigned long addr_limit;
     long pid;
     long priority;
     long vrun_time;
     long exit_code;
-
     struct file *file_struct[TASK_FILE_MAX];
     wait_queue_t wait_childexit;
     struct task_struct *next;

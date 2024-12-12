@@ -74,7 +74,17 @@ void HPET_init()
     unsigned int x;
     unsigned int *p;
     unsigned char *HPET_addr = (unsigned char*)Phy_To_Virt(0xfed00000); // HPET暫存器組的地址映射從這裡開始。
-    struct IO_APIC_RET_entry entry;
+    struct IO_APIC_RET_entry entry = {
+        .vector = 34,
+        .deliver_mode = APIC_ICR_IOAPIC_Fixed,
+        .dest_mode = ICR_IOAPIC_DELV_PHYSICAL,
+        .deliver_status = APIC_ICR_IOAPIC_Idle,
+        .polarity = APIC_IOAPIC_POLARITY_HIGH,
+        .irr = APIC_IOAPIC_IRR_RESET,
+        .trigger = APIC_ICR_IOAPIC_Edge,
+        .mask = APIC_ICR_IOAPIC_Masked,
+    };
+    
     // color_printk(RED, BLACK, "HPET - GCAP_ID:<%#018lx>\n", *(unsigned long *)HPET_addr);
 /*    
     get_cmos_time(&time);
@@ -82,18 +92,7 @@ void HPET_init()
                  time.year,time.month,time.day,time.hour,time.minute,time.second);
 */
     //init I/O APIC IRQ2 => HPET Timer 0
-    entry.vector = 34;
-    entry.deliver_mode = APIC_ICR_IOAPIC_Fixed;
-    entry.dest_mode = ICR_IOAPIC_DELV_PHYSICAL;
-    entry.deliver_status = APIC_ICR_IOAPIC_Idle;
-    entry.polarity = APIC_IOAPIC_POLARITY_HIGH;
-    entry.irr = APIC_IOAPIC_IRR_RESET;
-    entry.trigger = APIC_ICR_IOAPIC_Edge;
-    entry.mask = APIC_ICR_IOAPIC_Masked;
-    entry.reserved = 0;
-    entry.destination.physical.reserved1 = 0;
-    entry.destination.physical.phy_dest = 0;
-    entry.destination.physical.reserved2 = 0;
+
     
     register_irq(34, &entry, &HPET_handler, NULL, &HPET_int_controller, "HPET");
 

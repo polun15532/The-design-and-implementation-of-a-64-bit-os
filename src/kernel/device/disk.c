@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "disk.h"
 #include "interrupt.h"
 #include "APIC.h"
@@ -70,9 +55,9 @@ long cmd_out()
 
     switch (node->cmd) {
         case ATA_WRITE_CMD:	
-            io_out8(PORT_DISK1_DEVICE,0x40);
-
-            io_out8(PORT_DISK1_ERR_FEATURE, 0);
+            io_out8(PORT_DISK1_DEVICE, 0x40);
+            // LBA 48 位尋址模式需要寫入暫存器 2 次
+            io_out8(PORT_DISK1_ERR_FEATURE, 0);  // 更新錯誤位
             io_out8(PORT_DISK1_SECTOR_CNT, (node->count >> 8) & 0xff);
             io_out8(PORT_DISK1_SECTOR_LOW , (node->LBA >> 24) & 0xff);
             io_out8(PORT_DISK1_SECTOR_MID , (node->LBA >> 32) & 0xff);
@@ -178,7 +163,16 @@ void other_handler(unsigned long nr, unsigned long parameter)
 struct block_buffer_node *make_request(long cmd, unsigned long blocks, long count, unsigned char *buffer)
 {
     struct block_buffer_node *node = (struct block_buffer_node*)kmalloc(sizeof(*node), 0);
+
+    *node = (struct block_buffer_node) {
+        .cmd = cmd,
+        .LBA = blocks,
+        .count = count,
+        .buffer = buffer,
+    };
+
     wait_queue_init(&node->wait_queue, current); // 為當前的行程製作請求包
+    
     switch (cmd) {
         case ATA_READ_CMD:
             node->end_handler = read_handler;
@@ -190,18 +184,13 @@ struct block_buffer_node *make_request(long cmd, unsigned long blocks, long coun
             node->end_handler = other_handler; // 目前僅有硬碟設備信息讀取命令
             break;
     }
-    node->cmd = cmd;
-    node->LBA = blocks;
-    node->count = count;
-    node->buffer = buffer;
     return node;
 }
 
 void submit(struct block_buffer_node *node)
 {	
     add_request(node);
-    if(disk_request.in_using == NULL)
-        cmd_out();
+    if (!disk_request.in_using) cmd_out();
 }
 
 void wait_for_finish()
@@ -240,16 +229,14 @@ long IDE_ioctl(long cmd, long arg)
 
 long IDE_transfer(long cmd, unsigned long blocks, long count, unsigned char *buffer)
 {
-    struct block_buffer_node *node = NULL;
-  
-    if(cmd == ATA_READ_CMD || cmd == ATA_WRITE_CMD) {
-        // 僅硬碟讀寫命令才操作
-        node = make_request(cmd, blocks, count, buffer); // 建立請求包
-        submit(node); // 提交請求包
-        wait_for_finish(); // 等待
-    } else {
+    if (!(cmd == ATA_READ_CMD) && !(cmd == ATA_WRITE_CMD))
         return 0;
-    }
+    // 僅硬碟讀寫命令才操作
+
+    struct block_buffer_node *node = make_request(cmd, blocks, count, buffer); // 建立請求包;
+    submit(node); // 提交請求包
+    wait_for_finish(); // 等待
+
     return 1;
 }
 
@@ -268,7 +255,6 @@ hw_int_controller disk_int_controller = {
     .ack = IOAPIC_edge_ack
 };
 
-
 void disk_handler(unsigned long nr, unsigned long parameter, struct pt_regs *regs)
 {
     struct block_buffer_node *node = ((struct request_queue *)parameter)->in_using;
@@ -278,21 +264,16 @@ void disk_handler(unsigned long nr, unsigned long parameter, struct pt_regs *reg
 
 void disk_init()
 {
-    struct IO_APIC_RET_entry entry;
-
-    entry.vector = 0x2f;
-    entry.deliver_mode = APIC_ICR_IOAPIC_Fixed ;
-    entry.dest_mode = ICR_IOAPIC_DELV_PHYSICAL;
-    entry.deliver_status = APIC_ICR_IOAPIC_Idle;
-    entry.polarity = APIC_IOAPIC_POLARITY_HIGH;
-    entry.irr = APIC_IOAPIC_IRR_RESET;
-    entry.trigger = APIC_ICR_IOAPIC_Edge;
-    entry.mask = APIC_ICR_IOAPIC_Masked;
-    entry.reserved = 0;
-
-    entry.destination.physical.reserved1 = 0;
-    entry.destination.physical.phy_dest = 0;
-    entry.destination.physical.reserved2 = 0;
+    struct IO_APIC_RET_entry entry = {
+        .vector = 0x2f,
+        .deliver_mode = APIC_ICR_IOAPIC_Fixed,
+        .dest_mode = ICR_IOAPIC_DELV_PHYSICAL,
+        .deliver_status = APIC_ICR_IOAPIC_Idle,
+        .polarity = APIC_IOAPIC_POLARITY_HIGH,
+        .irr = APIC_IOAPIC_IRR_RESET,
+        .trigger = APIC_ICR_IOAPIC_Edge,
+        .mask = APIC_ICR_IOAPIC_Masked,
+    };
 
     register_irq(0x2f, &entry, &disk_handler, (unsigned long)&disk_request, &disk_int_controller, "disk1"); // 註冊硬碟中斷
     // 向量號0x2e與0x2f都是硬碟的中斷，但對應不同的硬碟驅動器。

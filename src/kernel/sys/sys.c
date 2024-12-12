@@ -128,8 +128,10 @@ unsigned long sys_getdents(int fd, void *dirent, long count)
     unsigned long ret = 0;
     if (fd < 0 || fd >= TASK_FILE_MAX)
         return -EBADF;
+    // 非法文件描述符
     if (count < 0)
         return -EINVAL;
+    // 非法值
     filp = current->file_struct[fd];
     if (filp->f_ops && filp->f_ops->readdir)
         ret = filp->f_ops->readdir(filp, dirent, fill_dentry);

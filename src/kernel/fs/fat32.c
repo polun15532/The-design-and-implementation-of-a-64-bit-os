@@ -1,18 +1,3 @@
-/***************************************************
-*		版权声明
-*
-*	本操作系统名为：MINE
-*	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-*	只允许个人学习以及公开交流使用
-*
-*	代码最终所有权及解释权归田宇所有；
-*
-*	本模块作者：	田宇
-*	EMail:		345538255@qq.com
-*
-*
-***************************************************/
-
 #include "fat32.h"
 #include "VFS.h"
 #include "disk.h"
@@ -91,6 +76,7 @@ next_cluster:
         kfree(buf);
         return NULL;
     }
+
     tmp_dentry = (struct FAT32_Directory*)(buf + filp->position % fsbi->bytes_per_cluster);
 
     for (i = filp->position % fsbi->bytes_per_cluster; i < fsbi->bytes_per_cluster; i += 32, tmp_dentry++, filp->position += 32) {

@@ -1,6 +1,6 @@
 # 編譯器參數
 CPPFLAGS := -I./include  # 預處理器標誌，用於指定頭文件路徑
-CFLAGS := -mcmodel=large -fno-builtin  -fno-omit-frame-pointer -fno-stack-protector -m64 -c
+CFLAGS := -mcmodel=large -fno-builtin  -fno-omit-frame-pointer -fno-stack-protector -Wno-unused-result -Wno-unused-value -Wno-unused-variable -m64 -c
 ASFLAGS := --64
 PIC := APIC  # 設定是否使用 APIC 或 8259A
 CC := gcc
@@ -23,7 +23,7 @@ else
     OBJECTS += device/8259A.o
 endif
 
-# 手動指定鏈接順序，先放 head.S，entry.S，然後是 main.c 等重要文件
+# 手動指定鏈接順序，先放 head.S，entry.S，然後是 main.c
 PRIORITY_OBJECTS := init/head.o init/entry.o init/APU_boot.o init/main.o
 
 # 查找所有的 .S 文件並將其轉換為 .o 文件

@@ -1,19 +1,3 @@
-;/***************************************************
-;		版权声明
-;
-;	本操作系统名为：MINE
-;	该操作系统未经授权不得以盈利或非盈利为目的进行开发，
-;	只允许个人学习以及公开交流使用
-;
-;	代码最终所有权及解释权归田宇所有；
-;
-;	本模块作者：	田宇
-;	EMail:		345538255@qq.com
-;
-;
-;***************************************************/
-; 以下程式碼僅作為學習使用，僅在田宇先生的程式碼上增添一些註釋
-
     org    0x7c00
 
 BaseOfStack        equ    0x7c00
@@ -186,7 +170,7 @@ Label_Go_On_Loading_File:
 
     mov	    cl,	    1
     call	Func_ReadOneSector
-    pop	    ax                              ; 第一次pop的值來自於push cx剩下的來自於puah ax指令
+    pop	    ax                              ; 第一次pop的值來自於push cx剩下的來自於push ax指令
     call    Func_GetFATEntry
     cmp	    ax,	    0fffh                   ; 0xfff代表文件的結尾
     jz	    Label_File_Loaded
