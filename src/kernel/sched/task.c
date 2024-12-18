@@ -26,10 +26,6 @@ struct thread_struct init_thread = {
     .error_code = 0
 };
 
-static inline void create_new_set_mpl4t(unsigned long *addr);
-static inline void create_new_pdpt(unsigned long *addr);
-static inline struct Page *create_new_pdt(unsigned long *addr);
-
 union task_union init_task_union __attribute__((__section__ (".data.init_task"))) = {INIT_TASK(init_task_union.task)};
 struct task_struct *init_task[NR_CPUS] = {&init_task_union.task, 0};
 struct tss_struct init_tss[NR_CPUS] = { [0 ... NR_CPUS-1] = INIT_TSS};
@@ -320,57 +316,57 @@ void exit_thread(struct task_struct *tsk)
 
 unsigned long do_fork(struct pt_regs *regs, unsigned long clone_flags, unsigned long stack_start, unsigned long stack_size)
 {
-	int retval = 0;
-	struct task_struct *tsk = (struct task_struct*)kmalloc(STACK_SIZE, 0);
+    int retval = 0;
+    struct task_struct *tsk = (struct task_struct*)kmalloc(STACK_SIZE, 0);
     if (!tsk) return -EAGAIN;
 
 //	alloc & copy task struct
-	color_printk(WHITE, BLACK, "struct task_struct address:%#018lx\n", (unsigned long)tsk);
+    color_printk(WHITE, BLACK, "struct task_struct address:%#018lx\n", (unsigned long)tsk);
 
     *tsk = *current;
 
-	list_init(&tsk->list);
-	tsk->priority = 2;
-	tsk->pid = global_pid++;
-	tsk->preempt_count = 0;
-	tsk->cpu_id = SMP_cpu_id();
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	tsk->next = init_task_union.task.next;
-	tsk->parent = current;
-	wait_queue_init(&tsk->wait_childexit,NULL);
+    list_init(&tsk->list);
+    tsk->priority = 2;
+    tsk->pid = global_pid++;
+    tsk->preempt_count = 0;
+    tsk->cpu_id = SMP_cpu_id();
+    tsk->state = TASK_UNINTERRUPTIBLE;
+    tsk->next = init_task_union.task.next;
+    tsk->parent = current;
+    wait_queue_init(&tsk->wait_childexit,NULL);
     init_task_union.task.next = tsk;
 
-	retval = -ENOMEM;
+    retval = -ENOMEM;
 //	copy flags
-	if(copy_flags(clone_flags, tsk)) goto copy_flags_fail;
+    if(copy_flags(clone_flags, tsk)) goto copy_flags_fail;
 
 //	copy mm struct
-	if(copy_mm(clone_flags, tsk)) goto copy_mm_fail;
+    if(copy_mm(clone_flags, tsk)) goto copy_mm_fail;
 
 //	copy file struct
-	if(copy_files(clone_flags, tsk)) goto copy_files_fail;
+    if(copy_files(clone_flags, tsk)) goto copy_files_fail;
 
 //	copy thread struct
-	if(copy_thread(clone_flags, stack_start, stack_size, tsk, regs)) goto copy_thread_fail;
+    if(copy_thread(clone_flags, stack_start, stack_size, tsk, regs)) goto copy_thread_fail;
 
-	retval = tsk->pid;
+    retval = tsk->pid;
 
-	wakeup_process(tsk);
+    wakeup_process(tsk);
 
 fork_ok:
-	return retval;
+    return retval;
 
 
 copy_thread_fail:
-	exit_thread(tsk);
+    exit_thread(tsk);
 copy_files_fail:
-	exit_files(tsk);
+    exit_files(tsk);
 copy_mm_fail:
-	exit_mm(tsk);
+    exit_mm(tsk);
 copy_flags_fail:
-	kfree(tsk);
+    kfree(tsk);
 
-	return retval;
+    return retval;
 }
 
 void exit_notify()
@@ -610,25 +606,4 @@ void task_init()
     init_task_union.task.state = TASK_RUNNING; // 修改成運行狀態。
     init_task_union.task.cpu_id = cpu_id;
 
-}
-
-static inline void create_new_set_mpl4t(unsigned long *addr)
-{
-    unsigned long *virtual = kmalloc(PAGE_4K_SIZE, 0);
-    memset(virtual, 0, PAGE_4K_SIZE);
-    set_mpl4t(addr, mk_mpl4t(Virt_To_Phy(virtual), PAGE_USER_GDT));
-}
-
-static inline void create_new_pdpt(unsigned long *addr)
-{
-    unsigned long *virtual = kmalloc(PAGE_4K_SIZE, 0);
-    memset(virtual, 0, PAGE_4K_SIZE);
-    set_pdpt(addr, mk_pdpt(Virt_To_Phy(virtual), PAGE_USER_Dir));
-}
-
-static inline struct Page *create_new_pdt(unsigned long *addr)
-{
-    struct Page *p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped);
-    set_pdt(addr, mk_pdt(p->PHY_address, PAGE_USER_Page));
-    return p;
 }

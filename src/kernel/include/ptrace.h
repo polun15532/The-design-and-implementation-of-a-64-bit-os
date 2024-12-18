@@ -1,5 +1,4 @@
 #ifndef __PTRACE_H__
-
 #define __PTRACE_H__
 
 struct pt_regs {

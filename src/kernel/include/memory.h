@@ -256,4 +256,28 @@ unsigned long slab_init();
 void pagetable_init();
 unsigned long do_brk(unsigned long addr, unsigned long len);
 
+static inline void create_new_set_mpl4t(unsigned long *addr)
+{
+    unsigned long *virtual = kmalloc(PAGE_4K_SIZE, 0);
+    memset(virtual, 0, PAGE_4K_SIZE);
+    set_mpl4t(addr, mk_mpl4t(Virt_To_Phy(virtual), PAGE_USER_GDT));
+}
+
+static inline void create_new_pdpt(unsigned long *addr)
+{
+    unsigned long *virtual = kmalloc(PAGE_4K_SIZE, 0);
+    memset(virtual, 0, PAGE_4K_SIZE);
+    set_pdpt(addr, mk_pdpt(Virt_To_Phy(virtual), PAGE_USER_Dir));
+}
+
+static inline struct Page *create_new_pdt(unsigned long *addr)
+{
+    struct Page *p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped);
+
+    if (!p) return NULL;
+    
+    set_pdt(addr, mk_pdt(p->PHY_address, PAGE_USER_Page));
+    return p;
+}
+
 #endif

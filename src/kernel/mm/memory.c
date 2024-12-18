@@ -359,7 +359,6 @@ void pagetable_init()
             if (*tmp == 0) {
                 unsigned long *virtual = kmalloc(PAGE_4K_SIZE, 0);
                 set_pdpt(tmp, mk_pdpt(Virt_To_Phy(virtual), PAGE_KERNEL_Dir));
-                // set_pdpt定義與set_mpl4t相同，mk_pdpt與mk_mpl4t相同，僅僅用於區分目前處理的是幾級頁表的項次。
             }
 
             tmp = (unsigned long*)((unsigned long)Phy_To_Virt(*tmp & (~0xfffUL)) + (((unsigned long)Phy_To_Virt(p->PHY_address) >> PAGE_2M_SHIFT) & 0x1ff) * 8);
@@ -375,31 +374,25 @@ void pagetable_init()
 unsigned long do_brk(unsigned long addr, unsigned long len)
 {
     unsigned long *tmp = NULL;
-    unsigned long *virtual = NULL;
     struct Page *p = NULL;
     unsigned long i = 0;
+
     for (i = addr; i < addr + len; i += PAGE_2M_SIZE) {
         tmp = Phy_To_Virt((unsigned long*)((unsigned long)current->mm->pgd & (~0xfffUL)) +
                          ((i >> PAGE_GDT_SHIFT) & 0x1ff));
-        if (*tmp == NULL) {
-            virtual = kmalloc(PAGE_4K_SIZE, 0);
-            memset(virtual, 0, PAGE_4K_SIZE);
-            set_mpl4t(tmp, mk_mpl4t(Virt_To_Phy(virtual), PAGE_USER_GDT));
-        }
-
+                         
+        if (*tmp == NULL) create_new_set_mpl4t(tmp);
+    
         tmp = Phy_To_Virt((unsigned long*)(*tmp & (~0xfffUL)) + ((i >> PAGE_1G_SHIFT) & 0x1ff));
-        if (*tmp == NULL) {
-            virtual = kmalloc(PAGE_4K_SIZE, 0);
-            memset(virtual, 0, PAGE_4K_SIZE);
-            set_pdpt(tmp, mk_pdpt(Virt_To_Phy(virtual), PAGE_USER_Dir));
-        }
+
+    
+        if (*tmp == NULL) create_new_pdpt(tmp);
 
         tmp = Phy_To_Virt((unsigned long*)(*tmp & (~0xfffUL)) + ((i >> PAGE_2M_SHIFT) & 0x1ff));
         if (*tmp == NULL) {
-            p = alloc_pages(ZONE_NORMAL, 1, PG_PTable_Maped);
-            if (p == NULL)
-                return -ENOMEM;
-            set_pdt(tmp, mk_pdt(p->PHY_address, PAGE_USER_Page));
+            p = create_new_pdt(tmp);
+
+            if (!p) return ENOMEM;
         }        
     }
 
