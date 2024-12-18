@@ -73,26 +73,17 @@ static inline void list_del(struct List *entry)
 
 static inline long list_is_empty(struct List *entry)
 {
-    if(entry == entry->next && entry->prev == entry)
-        return 1;
-    else
-        return 0;
+    return entry == entry->next && entry->prev == entry;
 }
 
 static inline struct List *list_prev(struct List *entry)
 {
-    if(entry->prev != NULL)
-        return entry->prev;
-    else
-        return NULL;
+    return entry->prev;
 }
 
 static inline struct List *list_next(struct List *entry)
 {
-    if(entry->next != NULL)
-        return entry->next;
-    else
-        return NULL;
+    return entry->next;
 }
 
 /*
@@ -101,7 +92,7 @@ static inline struct List *list_next(struct List *entry)
 
 static inline void *memcpy(void *From, void *To, long Num)
 {
-    int d0,d1,d2;
+    int d0, d1, d2;
     __asm__ __volatile__    (   "cld    \n\t"
                     "rep    \n\t"
                     "movsq  \n\t"
@@ -153,7 +144,7 @@ static inline int memcmp(void *FirstPart, void *SecondPart, long Count)
 
 static inline void *memset(void *Address, unsigned char C, long Count)
 {
-    int d0,d1;
+    int d0, d1;
     unsigned long tmp = C *0x0101010101010101UL;
     __asm__ __volatile__    (   "cld    \n\t"
                     "rep    \n\t"
@@ -386,7 +377,7 @@ static inline unsigned long rdmsr(unsigned long address)
     unsigned int tmp0 = 0;
     unsigned int tmp1 = 0;
     __asm__ __volatile__( "rdmsr	\n\t":"=d"(tmp0),"=a"(tmp1):"c"(address):"memory");	
-    return (unsigned long)tmp0<<32 | tmp1;
+    return (unsigned long)tmp0 << 32 | tmp1;
 }
 
 static inline void wrmsr(unsigned long address, unsigned long value)
@@ -396,14 +387,14 @@ static inline void wrmsr(unsigned long address, unsigned long value)
 
 static inline unsigned long get_rsp()
 {
-    unsigned long tmp = 0;
+    register unsigned long tmp = 0;
     __asm__ __volatile__ ("movq %%rsp, %0 \n\t":"=r"(tmp)::"memory");
     return tmp;
 }
 
 static inline unsigned long get_rflags()
 {
-    unsigned long tmp = 0;
+    register unsigned long tmp = 0;
     __asm__ __volatile__ ("pushfq           \n\t"
                           "movq %%rsp, %0   \n\t"
                           "popfq            \n\t"
@@ -414,10 +405,7 @@ static inline unsigned long get_rflags()
 static inline long verify_area(unsigned char *addr, unsigned long size)
 {
     // 檢查地址是否為用戶空間。
-    if ((unsigned long) addr + size <= (unsigned long)0x00007fffffffffff)
-        return 1;
-    else
-        return 0;
+    return (unsigned long)addr + size <= (unsigned long)0x00007fffffffffff;
 }
 
 static inline long copy_from_user(void *from, void *to, unsigned long size)
@@ -441,8 +429,7 @@ static inline long copy_from_user(void *from, void *to, unsigned long size)
 static inline long copy_to_user(void *from, void *to, unsigned long size)
 {
     unsigned long d0, d1;
-    if (!verify_area(to, size))
-        return 0;
+    if (!verify_area(to, size)) return 0;
     __asm__ __volatile__ ("rep          \n\t"
                           "movsq        \n\t"
                           "movq  %3, %0 \n\t"
@@ -456,8 +443,7 @@ static inline long copy_to_user(void *from, void *to, unsigned long size)
 
 static inline long strncpy_from_user(void *from, void *to, unsigned long size)
 {
-    if(!verify_area(from, size))
-        return 0;
+    if(!verify_area(from, size)) return 0;
 
     strncpy(to, from, size);
     return size;    
