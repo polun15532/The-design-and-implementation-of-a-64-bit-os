@@ -339,69 +339,69 @@ void exit_thread(struct task_struct *tsk)
 
 unsigned long do_fork(struct pt_regs * regs, unsigned long clone_flags, unsigned long stack_start, unsigned long stack_size)
 {
-	int retval = 0;
-	struct task_struct *tsk = NULL;
+    int retval = 0;
+    struct task_struct *tsk = NULL;
 
 //	alloc & copy task struct
-	tsk = (struct task_struct *)kmalloc(STACK_SIZE,0);
-	color_printk(WHITE,BLACK,"struct task_struct address:%#018lx\n",(unsigned long)tsk);
+    tsk = (struct task_struct *)kmalloc(STACK_SIZE,0);
+    color_printk(WHITE,BLACK,"struct task_struct address:%#018lx\n",(unsigned long)tsk);
 
-	if(tsk == NULL)
-	{
-		retval = -EAGAIN;
-		goto alloc_copy_task_fail;
-	}
+    if(tsk == NULL)
+    {
+        retval = -EAGAIN;
+        goto alloc_copy_task_fail;
+    }
 
-	memset(tsk,0,sizeof(*tsk));
-	memcpy(current,tsk,sizeof(struct task_struct));
+    memset(tsk,0,sizeof(*tsk));
+    memcpy(current,tsk,sizeof(struct task_struct));
 
-	list_init(&tsk->list);
-	tsk->priority = 2;
-	tsk->pid = global_pid++;
-	tsk->preempt_count = 0;
-	tsk->cpu_id = SMP_cpu_id();
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	tsk->next = init_task_union.task.next;
-	init_task_union.task.next = tsk;
-	tsk->parent = current;
-	wait_queue_init(&tsk->wait_childexit,NULL);
+    list_init(&tsk->list);
+    tsk->priority = 2;
+    tsk->pid = global_pid++;
+    tsk->preempt_count = 0;
+    tsk->cpu_id = SMP_cpu_id();
+    tsk->state = TASK_UNINTERRUPTIBLE;
+    tsk->next = init_task_union.task.next;
+    init_task_union.task.next = tsk;
+    tsk->parent = current;
+    wait_queue_init(&tsk->wait_childexit,NULL);
 
-	retval = -ENOMEM;
+    retval = -ENOMEM;
 //	copy flags
-	if(copy_flags(clone_flags,tsk))
-		goto copy_flags_fail;
+    if(copy_flags(clone_flags,tsk))
+        goto copy_flags_fail;
 
 //	copy mm struct
-	if(copy_mm(clone_flags,tsk))
-		goto copy_mm_fail;
+    if(copy_mm(clone_flags,tsk))
+        goto copy_mm_fail;
 
 //	copy file struct
-	if(copy_files(clone_flags,tsk))
-		goto copy_files_fail;
+    if(copy_files(clone_flags,tsk))
+        goto copy_files_fail;
 
 //	copy thread struct
-	if(copy_thread(clone_flags,stack_start,stack_size,tsk,regs))
-		goto copy_thread_fail;
+    if(copy_thread(clone_flags,stack_start,stack_size,tsk,regs))
+        goto copy_thread_fail;
 
-	retval = tsk->pid;
+    retval = tsk->pid;
 
-	wakeup_process(tsk);
+    wakeup_process(tsk);
 
 fork_ok:
-	return retval;
+    return retval;
 
 
 copy_thread_fail:
-	exit_thread(tsk);
+    exit_thread(tsk);
 copy_files_fail:
-	exit_files(tsk);
+    exit_files(tsk);
 copy_mm_fail:
-	exit_mm(tsk);
+    exit_mm(tsk);
 copy_flags_fail:
 alloc_copy_task_fail:
-	kfree(tsk);
+    kfree(tsk);
 
-	return retval;
+    return retval;
 }
 
 void exit_notify()

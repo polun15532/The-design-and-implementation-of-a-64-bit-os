@@ -41,6 +41,73 @@
  *  syscall need rcx(rip) r11(rflags)
  *  xchg rdx to r10, rcx to r11
  */
+#define validate_fd(fd) !((fd) < 0 || (fd) >= TASK_FILE_MAX)
+
+static inline long copy_string_from_user(const char *usr, char **buffer, unsigned long size)
+{
+    if (!usr || !buffer || size == 0) return -EINVAL;
+
+    long length = strnlen_user(usr, size);
+    if (length <= 0) return -EFAULT;
+
+    if (length >= size) return -ENAMETOOLONG;
+
+    *buffer = (char*)kmalloc(length + 1, 0);
+
+    if (!*buffer) return -ENOMEM;
+
+    strncpy_from_user(usr, *buffer, size);
+    (*buffer)[length] = '\0';
+    return 0;
+}
+
+static inline long get_dentry_from_user_path(const char *user_path, struct dir_entry **dentry)
+{
+    char *path = NULL;
+    long error_code = copy_string_from_user(user_path, &path, PAGE_4K_SIZE);
+    if (error_code) return error_code;
+
+    *dentry = path_walk(path, 0);
+    kfree(path);
+
+    return *dentry == NULL ?  -ENOENT : 0;
+}
+
+static inline long alloc_fd(struct file **f_array)
+{
+    for (int fd = 0; fd < TASK_FILE_MAX; ++fd) {
+        if (f_array[fd] == NULL)
+            return fd;
+    }
+    return -EMFILE; // 沒有可用的檔案描述符
+}
+
+static inline struct file *create_file_struct(struct dir_entry *dentry, int flags) {
+    struct file *filp = (struct file*)kmalloc(sizeof(*filp), 0);
+    if (!filp) return NULL;
+
+    *filp = (struct file){
+        .dentry = dentry,
+        .mode = flags,
+        .f_ops = (dentry->dir_inode->attribute & FS_ATTR_DEVICE) ? &keyboard_fops : dentry->dir_inode->f_ops,
+    };
+    return filp;    
+}
+
+static inline long do_file_open(struct file *filp)
+{
+    if (filp->f_ops && filp->f_ops->open)
+        return filp->f_ops->open(filp->dentry->dir_inode, filp) == 1 ? 0 : -EFAULT;
+    return 0;
+}
+
+static inline void handle_truncate_append(struct file *filp) {
+    if (filp->mode & O_TRUNC)
+        filp->dentry->dir_inode->file_size = 0;
+    if (filp->mode & O_APPEND)
+        filp->position = filp->dentry->dir_inode->file_size;
+}
+
 
 unsigned long sys_exit(int error_code)
 {
@@ -85,30 +152,19 @@ unsigned long sys_wait4(unsigned long pid, int *status, int options, void *rusag
 
 unsigned long sys_execve()
 {
-    char *path_name = NULL;
+    char *path = NULL;
     long path_len = 0;
-    long error = 0;
+    unsigned long error_code = 0;
     struct pt_regs *regs = (struct pt_regs*)current->thread->rsp0 - 1;
     color_printk(GREEN, BLACK, "sys_execve\n");
-    path_name = (char*)kmalloc(PAGE_4K_SIZE, 0);
-    
-    if (path_name == NULL) return -ENOMEM;
 
-    path_len = strnlen_user((char*)regs->rsi, PAGE_4K_SIZE);
+    error_code = copy_string_from_user((char*)regs->rsi, &path, PAGE_4K_SIZE);
 
-    if (path_len <= 0) {
-        kfree(path_name);
-        return -EFAULT;
-    } else if (path_len >= PAGE_4K_SIZE) {
-        kfree(path_name);
-        return -ENAMETOOLONG;        
-    }
+    if (error_code) return error_code;
 
-    strncpy((char*)regs->rdi, path_name, path_len);
-    path_name[path_len] = '\0';
-    error = do_execve(regs, path_name, (char**)regs->rsi, NULL);
-    kfree(path_name);
-    return error;
+    error_code = do_execve(regs, path, (char**)regs->rsi, NULL);
+    kfree(path);
+    return error_code;
 }
 
 int fill_dentry(void *buf, char *name, long name_len, long type, long offset)
@@ -116,6 +172,7 @@ int fill_dentry(void *buf, char *name, long name_len, long type, long offset)
 
     if ((unsigned long)buf < TASK_SIZE && !verify_area(buf, sizeof(struct dirent) + name_len))
         return -EFAULT;
+
     *(struct dirent*)buf = (struct dirent) {
         .d_name_len = name_len,
         .d_type = type,
@@ -130,8 +187,10 @@ unsigned long sys_getdents(int fd, void *dirent, long count)
 {
     struct file *filp = NULL;
     unsigned long ret = 0;
-    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
-    // 非法文件描述符
+
+    if (!validate_fd(fd)) return -EBADF;
+    // 非法檔案描述符
+
     if (count < 0) return -EINVAL;
     // 非法值
     filp = current->file_struct[fd];
@@ -143,30 +202,14 @@ unsigned long sys_getdents(int fd, void *dirent, long count)
 unsigned long sys_chdir(char *filename)
 {
     char *path = NULL;
-    long path_len = 0;
     struct dir_entry *dentry = NULL;
+    unsigned long error_code;
 
     color_printk(GREEN, BLACK, "sys_chdir\n");
-    path = (char*)kmalloc(PAGE_4K_SIZE, 0);
+    error_code = get_dentry_from_user_path(filename, &dentry);
     
-    if (path == NULL) return -ENOMEM;
+    if (error_code) return error_code;
 
-    path_len = strnlen_user(filename, PAGE_4K_SIZE);
-    if (path_len <= 0) {
-        kfree(path);
-        return -EFAULT;
-    } else if (path_len >= PAGE_4K_SIZE) {
-        kfree(path);
-        return -ENAMETOOLONG;
-    }
-
-    strncpy_from_user(filename, path, path_len);
-    path[path_len] = '\0';
-
-    dentry = path_walk(path, 0);
-    kfree(path);
-
-    if (dentry == NULL) return -ENOENT;
     if (!(dentry->dir_inode->attribute & FS_ATTR_DIR)) return -ENOTDIR;
     
     return 0;
@@ -222,19 +265,19 @@ unsigned long sys_vfork()
     return do_fork(regs, CLONE_VM | CLONE_FS | CLONE_SIGNAL, regs->rsp, 0);      
 }
 
-unsigned long sys_lseek(int filds, long offset, int whence)
+unsigned long sys_lseek(int fd, long offset, int whence)
 {
     struct file *filp = NULL;
     unsigned long ret = 0;
 
-    color_printk(GREEN, BLACK, "sys_leek:%d\n", filds); // 打印文件描述符
+    color_printk(GREEN, BLACK, "sys_leek:%d\n", fd); // 打印檔案描述符
 
     // 無效的文件描述符
-    if (filds < 0 || filds >= TASK_FILE_MAX) return -EBADF;
+    if (!validate_fd(fd)) return -EBADF;
     // 無效的訪問基地址
     if (whence < 0 || whence >= SEEK_MAX) return -EINVAL;
 
-    filp = current->file_struct[filds];
+    filp = current->file_struct[fd];
     if (filp && filp->f_ops && filp->f_ops->lseek)
         ret = filp->f_ops->lseek(filp, offset, whence);
     return ret;
@@ -245,8 +288,8 @@ unsigned long sys_write(int fd,void * buf,long count)
     struct file *filp = NULL;
     unsigned long ret = 0;
 
-    // color_printk(GREEN, BLACK, "sys_write:%d\n", fd);
-    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
+    color_printk(GREEN, BLACK, "sys_write:%d\n", fd);
+    if (!validate_fd(fd)) return -EBADF;
     
     if (count < 0) return -EINVAL;
 
@@ -261,11 +304,9 @@ unsigned long sys_read(int fd, void *buf, long count)
 {
     struct file *filp = NULL;
     unsigned long ret = 0;
+    if (!validate_fd(fd)) return -EBADF;
 
-    if (fd < 0 || fd >= TASK_FILE_MAX)
-        return -EBADF;
-    if (count < 0)
-        return -EINVAL;
+    if (count < 0) return -EINVAL;
 
     filp = current->file_struct[fd];
 
@@ -279,7 +320,8 @@ unsigned long sys_close(int fd)
     struct file *filp = NULL;
 
     color_printk(GREEN, BLACK, "sys_close:%d\n",fd);
-    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
+
+    if (!validate_fd(fd)) return -EBADF;
 
     filp = current->file_struct[fd]; // 從文件描述符找到目標文件
 
@@ -294,81 +336,40 @@ unsigned long sys_close(int fd)
 
 unsigned long sys_open(char *filename, int flags)
 {
-    char *path = NULL;
-    long path_len = 0;
-    long error = 0;
+    long error_code = 0;
     struct dir_entry *dentry = NULL;
     struct file *filp = NULL;
-    struct file **f = NULL;
+    struct file **f = current->file_struct;
     int fd = -1;
+
+    error_code = get_dentry_from_user_path(filename, &dentry);
     
-    path = (char*)kmalloc(PAGE_4K_SIZE, 0);
-    
-    if (path == NULL) return -ENOMEM;
+    if (error_code) return error_code;
 
-    // 驗證用戶傳入的文件名長度是否超過 4KB 緩衝區
-    path_len = strnlen_user(filename, PAGE_4K_SIZE);
-
-    if (path_len <= 0) {
-        kfree(path);
-        return -EFAULT;
-    } else if (path_len >= PAGE_4K_SIZE) {
-        kfree(path);
-        return -ENAMETOOLONG;
-    }
-    strncpy_from_user(filename, path, path_len);
-    path[path_len] = '\0';
-
-    dentry = path_walk(path, 0);
-
-    kfree(path);
-
-    if (dentry == NULL) {
-        color_printk(BLUE, WHITE, "Can`t find file\n");
-        return -ENOENT;
-    }
-
-    if (!!(flags & O_DIRECTORY) ^ (dentry->dir_inode->attribute == FS_ATTR_DIR)) {
+    // 驗證是否為目錄或檔案型別與 flags 相符
+    if (!!(flags & O_DIRECTORY) ^ (dentry->dir_inode->attribute == FS_ATTR_DIR))
         return flags & O_DIRECTORY ? -ENOTDIR : -EISDIR;   
-    }
 
-    filp = (struct file*)kmalloc(sizeof(*filp), 0);
-    memset(filp, 0, sizeof(*filp));
-    
-    filp->dentry = dentry;
-    filp->mode = flags;
+    filp = create_file_struct(dentry, flags);
+    if (!filp) return -ENOMEM;
 
-    if (dentry->dir_inode->attribute & FS_ATTR_DEVICE)
-        filp->f_ops = &keyboard_fops;
-    else
-        filp->f_ops = dentry->dir_inode->f_ops;
-    // 如果文件有自定義的打開操作，則調用
-    if (filp && filp->f_ops && filp->f_ops->open)
-        error = filp->f_ops->open(dentry->dir_inode, filp);
+    error_code = do_file_open(filp);
 
-    if (error != 1) {
+    if (error_code) {
         kfree(filp);
         return -EFAULT;
     }
 
-    if (filp->mode & O_TRUNC) {
-        filp->dentry->dir_inode->file_size = 0;
-    }
+    handle_truncate_append(filp);
 
-    if (filp->mode & O_APPEND) {
-        filp->position = filp->dentry->dir_inode->file_size;
-    }
+    fd = alloc_fd(f);
 
-    f = current->file_struct;
-
-    for (fd = 0; fd < TASK_FILE_MAX && f[fd]; fd++);
-
-    if (fd == TASK_FILE_MAX) {
+    if (!validate_fd(fd)) {
         kfree(filp);
         return -EMFILE;
     }
-    f[fd] = filp;
 
+    f[fd] = filp;
     return fd;
 }
 
