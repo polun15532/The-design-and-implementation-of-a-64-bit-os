@@ -33,8 +33,7 @@ void wakeup(wait_queue_t *wait_queue_head, long state)
 {
 	wait_queue_t *wait = NULL;
 
-	if(list_is_empty(&wait_queue_head->wait_list))
-		return;
+	if(list_is_empty(&wait_queue_head->wait_list)) return;
 
 	wait = container_of(list_next(&wait_queue_head->wait_list), wait_queue_t, wait_list);
 

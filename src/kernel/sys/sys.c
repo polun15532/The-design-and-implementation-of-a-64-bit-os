@@ -62,10 +62,8 @@ unsigned long sys_wait4(unsigned long pid, int *status, int options, void *rusag
         }
     }
 
-    if (child == NULL)
-        return -ECHILD;
-    if (options)
-        return -EINVAL;
+    if (child == NULL) return -ECHILD;
+    if (options) return -EINVAL;
 
     if (child->state == TASK_ZOMBIE) {
         // 子行程已結束
@@ -93,10 +91,11 @@ unsigned long sys_execve()
     struct pt_regs *regs = (struct pt_regs*)current->thread->rsp0 - 1;
     color_printk(GREEN, BLACK, "sys_execve\n");
     path_name = (char*)kmalloc(PAGE_4K_SIZE, 0);
-    if (path_name == NULL)
-        return -ENOMEM;
-    memset(path_name, 0, PAGE_4K_SIZE);
+    
+    if (path_name == NULL) return -ENOMEM;
+
     path_len = strnlen_user((char*)regs->rsi, PAGE_4K_SIZE);
+
     if (path_len <= 0) {
         kfree(path_name);
         return -EFAULT;
@@ -104,7 +103,9 @@ unsigned long sys_execve()
         kfree(path_name);
         return -ENAMETOOLONG;        
     }
+
     strncpy((char*)regs->rdi, path_name, path_len);
+    path_name[path_len] = '\0';
     error = do_execve(regs, path_name, (char**)regs->rsi, NULL);
     kfree(path_name);
     return error;
@@ -112,13 +113,16 @@ unsigned long sys_execve()
 
 int fill_dentry(void *buf, char *name, long name_len, long type, long offset)
 {
-    struct dirent *dent = (struct dirent*)buf;
+
     if ((unsigned long)buf < TASK_SIZE && !verify_area(buf, sizeof(struct dirent) + name_len))
         return -EFAULT;
-    memcpy(name, dent->d_name, name_len);
-    dent->d_name_len = name_len;
-    dent->d_type = type;
-    dent->d_offset = offset;
+    *(struct dirent*)buf = (struct dirent) {
+        .d_name_len = name_len,
+        .d_type = type,
+        .d_offset = offset,
+    };
+    memcpy(name, ((struct dirent*)buf)->d_name, name_len);
+
     return sizeof(struct dirent) + name_len;
 }
 
@@ -126,11 +130,9 @@ unsigned long sys_getdents(int fd, void *dirent, long count)
 {
     struct file *filp = NULL;
     unsigned long ret = 0;
-    if (fd < 0 || fd >= TASK_FILE_MAX)
-        return -EBADF;
+    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
     // 非法文件描述符
-    if (count < 0)
-        return -EINVAL;
+    if (count < 0) return -EINVAL;
     // 非法值
     filp = current->file_struct[fd];
     if (filp->f_ops && filp->f_ops->readdir)
@@ -147,9 +149,8 @@ unsigned long sys_chdir(char *filename)
     color_printk(GREEN, BLACK, "sys_chdir\n");
     path = (char*)kmalloc(PAGE_4K_SIZE, 0);
     
-    if (path == NULL)
-        return -ENOMEM;
-    memset(path, 0, PAGE_4K_SIZE);
+    if (path == NULL) return -ENOMEM;
+
     path_len = strnlen_user(filename, PAGE_4K_SIZE);
     if (path_len <= 0) {
         kfree(path);
@@ -158,13 +159,16 @@ unsigned long sys_chdir(char *filename)
         kfree(path);
         return -ENAMETOOLONG;
     }
+
     strncpy_from_user(filename, path, path_len);
+    path[path_len] = '\0';
+
     dentry = path_walk(path, 0);
     kfree(path);
-    if (dentry == NULL)
-        return -ENOENT;
-    if (!(dentry->dir_inode->attribute & FS_ATTR_DIR))
-        return -ENOTDIR;
+
+    if (dentry == NULL) return -ENOENT;
+    if (!(dentry->dir_inode->attribute & FS_ATTR_DIR)) return -ENOTDIR;
+    
     return 0;
 }
 
@@ -189,16 +193,17 @@ unsigned long sys_reboot(unsigned long cmd, void *arg)
 
 unsigned long sys_brk(unsigned long brk)
 {
+    struct mm_struct *cur_mm = current->mm;
     unsigned long new_brk = PAGE_2M_ALIGN(brk); // 每次修改 brk 以頁為單位
     if (new_brk == 0)
-        return current->mm->start_brk; // 如果傳入的 brk 為 0 就不做任何更改。
+        return cur_mm->start_brk; // 如果傳入的 brk 為 0 就不做任何更改。
 
-    if (new_brk < current->mm->end_brk) // 目前尚不支援縮小 heap 空間的操作
+    if (new_brk < cur_mm->end_brk) // 目前尚不支援縮小 heap 空間的操作
         return 0;
 
-    new_brk = do_brk(current->mm->end_brk, new_brk - current->mm->end_brk); // 擴展 heap 邊界
+    new_brk = do_brk(cur_mm->end_brk, new_brk - cur_mm->end_brk); // 擴展 heap 邊界
 
-    current->mm->end_brk = new_brk;
+    cur_mm->end_brk = new_brk;
 
     return new_brk;
 }
@@ -225,11 +230,9 @@ unsigned long sys_lseek(int filds, long offset, int whence)
     color_printk(GREEN, BLACK, "sys_leek:%d\n", filds); // 打印文件描述符
 
     // 無效的文件描述符
-    if (filds < 0 || filds >= TASK_FILE_MAX)
-        return -EBADF;
+    if (filds < 0 || filds >= TASK_FILE_MAX) return -EBADF;
     // 無效的訪問基地址
-    if (whence < 0 || whence >= SEEK_MAX)
-        return -EINVAL;
+    if (whence < 0 || whence >= SEEK_MAX) return -EINVAL;
 
     filp = current->file_struct[filds];
     if (filp && filp->f_ops && filp->f_ops->lseek)
@@ -243,10 +246,9 @@ unsigned long sys_write(int fd,void * buf,long count)
     unsigned long ret = 0;
 
     // color_printk(GREEN, BLACK, "sys_write:%d\n", fd);
-    if (fd < 0 || fd >= TASK_FILE_MAX)
-        return -EBADF;
-    if (count < 0)
-        return -EINVAL;
+    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
+    
+    if (count < 0) return -EINVAL;
 
     filp = current->file_struct[fd];
     if (filp && filp->f_ops && filp->f_ops->write)
@@ -276,9 +278,8 @@ unsigned long sys_close(int fd)
 {
     struct file *filp = NULL;
 
-    // color_printk(GREEN, BLACK, "sys_close:%d\n",fd);
-    if (fd < 0 || fd >= TASK_FILE_MAX)
-        return -EBADF;
+    color_printk(GREEN, BLACK, "sys_close:%d\n",fd);
+    if (fd < 0 || fd >= TASK_FILE_MAX) return -EBADF;
 
     filp = current->file_struct[fd]; // 從文件描述符找到目標文件
 
@@ -303,13 +304,11 @@ unsigned long sys_open(char *filename, int flags)
     
     path = (char*)kmalloc(PAGE_4K_SIZE, 0);
     
-    if (path == NULL)
-        return -ENOMEM;
-
-    memset(path, 0, PAGE_4K_SIZE);
+    if (path == NULL) return -ENOMEM;
 
     // 驗證用戶傳入的文件名長度是否超過 4KB 緩衝區
     path_len = strnlen_user(filename, PAGE_4K_SIZE);
+
     if (path_len <= 0) {
         kfree(path);
         return -EFAULT;
@@ -318,6 +317,7 @@ unsigned long sys_open(char *filename, int flags)
         return -ENAMETOOLONG;
     }
     strncpy_from_user(filename, path, path_len);
+    path[path_len] = '\0';
 
     dentry = path_walk(path, 0);
 
@@ -327,7 +327,6 @@ unsigned long sys_open(char *filename, int flags)
         color_printk(BLUE, WHITE, "Can`t find file\n");
         return -ENOENT;
     }
-    if (dentry->dir_inode->attribute == FS_ATTR_DIR)
 
     if (!!(flags & O_DIRECTORY) ^ (dentry->dir_inode->attribute == FS_ATTR_DIR)) {
         return flags & O_DIRECTORY ? -ENOTDIR : -EISDIR;   
